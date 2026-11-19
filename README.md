@@ -29,7 +29,7 @@ static/
 test-data/             sample WealthyExile exports
 ```
 
-To add a tool: create `static/<tool>/index.html` (link `../style.css` and `../theme.js`, add an `← All tools` link to `../`) and add a card for it in `static/index.html`.
+To add a tool: create `static/<tool>/index.html` (link `../style.css` and `../theme.js`, add an `← All tools` link to `../`, and include `<meta name="robots" content="noindex, nofollow">` so it stays out of search results) and add a card for it in `static/index.html`.
 
 ## Run
 
