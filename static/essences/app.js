@@ -3,6 +3,7 @@ const TIERS = ["Screaming", "Shrieking", "Deafening"];
 const VIEWS = ["grid", "list", "upgrade"];
 
 const state = {
+  leagues: [],
   league: null,
   data: null,
   view: "grid",
@@ -591,13 +592,14 @@ async function openDetail(id) {
   $("#detail").showModal();
 
   try {
-    const res = await fetch(`/api/history?league=${encodeURIComponent(state.league)}&id=${encodeURIComponent(id)}`);
-    const rows = await res.json();
-    const pts = rows.filter((r) => r.chaos != null).map((r) => ({ x: r.ts, y: r.chaos }));
+    // History files are [[unix_ts, chaos, volume], ...]; a missing file just means no history yet.
+    const res = await fetch(`${DATA}/history/${leagueSlug()}/${encodeURIComponent(id)}.json`, { cache: "no-cache" });
+    const rows = res.ok ? await res.json() : [];
+    const pts = rows.filter((r) => r[1] != null).map(([ts, chaos]) => ({ x: ts, y: chaos }));
     const fmtX = (ts) => new Date(ts * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
     $("#hist").innerHTML = pts.length >= 2
       ? lineChart(pts, (y) => price(y), fmtX)
-      : `<p class="muted">${pts.length} snapshot${pts.length === 1 ? "" : "s"} so far. Leave the server running and history builds up every 30 minutes.</p>`;
+      : `<p class="muted">${pts.length} snapshot${pts.length === 1 ? "" : "s"} so far. History builds up every 30 minutes.</p>`;
   } catch {
     $("#hist").innerHTML = `<p class="muted">Couldn't load history.</p>`;
   }
@@ -605,12 +607,20 @@ async function openDetail(id) {
 
 // ---------- data ----------
 
+// Static JSON written by update_data.py (GitHub Action on Pages, server.py locally).
+// Relative, so the site works at a domain root or under /<repo>/ on github.io.
+const DATA = "../data";
+
+function leagueSlug() {
+  return state.leagues.find((l) => l.name === state.league)?.slug ?? "";
+}
+
 async function fetchData() {
   $("#status").textContent = "Loading…";
   try {
-    const res = await fetch(`/api/essences?league=${encodeURIComponent(state.league)}`);
+    const res = await fetch(`${DATA}/essences/${leagueSlug()}.json`, { cache: "no-cache" });
+    if (!res.ok) throw new Error(res.status === 404 ? "no data for this league yet" : res.statusText);
     const json = await res.json();
-    if (!res.ok) throw new Error(json.error || res.statusText);
     state.data = json;
     render();
   } catch (err) {
@@ -620,7 +630,12 @@ async function fetchData() {
 
 async function init() {
   initStash();
-  const leagues = await fetch("/api/leagues").then((r) => r.json()).catch(() => ["Standard"]);
+  state.leagues = await fetch(`${DATA}/leagues.json`, { cache: "no-cache" }).then((r) => r.json()).catch(() => []);
+  if (!state.leagues.length) {
+    $("#status").textContent = "No price data yet. It's generated every 30 minutes.";
+    return;
+  }
+  const leagues = state.leagues.map((l) => l.name);
   const saved = load("league", null);
   state.league = leagues.includes(saved) ? saved : leagues[0];
   // A #grid / #list / #upgrade link (e.g. from the tools hub) wins over the remembered view.
