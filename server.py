@@ -176,6 +176,12 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
 
+    def end_headers(self):
+        # Static files: make browsers revalidate so code changes show up without a hard refresh.
+        if not self.path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def send_json(self, payload, status=200):
         body = json.dumps(payload).encode()
         self.send_response(status)

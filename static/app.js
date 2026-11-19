@@ -98,46 +98,53 @@ function layoutCell(text, tier) {
   return { special: false, kind: text, tier };
 }
 
-// Builds the stash-tab table. cellFn(e, cell) returns { body, heat, heatColor, title } for one placed essence.
+// Builds the stash-tab grid. cellFn(e, cell) returns { body, heat, heatColor, title } for one placed essence.
+// Each section between separators (the two mirrored halves) is its own table, so on narrow screens
+// the sections can stack vertically (see layoutStashGrids).
 function stashGridHtml(cellFn) {
   const layout = state.layout;
   const essences = state.data.essences;
   const byKey = new Map(essences.filter((e) => e.tier).map((e) => [`${e.kind}|${e.tier}`, e]));
   const specials = new Map(essences.filter((e) => !e.tier).map((e) => [e.kind, e]));
   const q = state.search.trim().toLowerCase();
-  const gap = `<td class="gap" aria-hidden="true"></td>`;
   const placed = new Set();
 
-  let html = `<table class="grid stash"><thead><tr>`;
-  layout.headers.forEach((h, i) => {
-    html += `<th>${esc(h)}</th>`;
-    if (layout.gapAfter.has(i)) html += `<th class="gap"></th>`;
+  // Split column indexes into sections at each separator.
+  const sections = [[]];
+  layout.headers.forEach((_, i) => {
+    sections[sections.length - 1].push(i);
+    if (layout.gapAfter.has(i) && i < layout.headers.length - 1) sections.push([]);
   });
-  html += `</tr></thead><tbody>`;
 
-  for (const row of layout.rows) {
-    html += `<tr>`;
-    row.forEach((text, i) => {
-      const cell = layoutCell(text, layout.headers[i]);
-      const e = cell && (cell.special ? specials.get(cell.kind) : byKey.get(`${cell.kind}|${cell.tier}`));
-      if (!cell) {
-        html += `<td class="empty"></td>`;
-      } else if (!e) {
-        html += `<td class="missing" title="${esc(text)}: no price data"><div class="cell"><span class="muted">${esc(cell.kind)}</span></div></td>`;
-      } else {
-        placed.add(e.id);
-        const c = cellFn(e, cell);
-        const dim = q && !e.name.toLowerCase().includes(q) ? " dim" : "";
-        const style = `--h:${(c.heat ?? 0).toFixed(3)}${c.heatColor ? `;--hc:${c.heatColor}` : ""}`;
-        html += `<td class="${cell.special ? "special-cell" : ""}${dim}" style="${style}" data-id="${esc(e.id)}" title="${esc(c.title ?? e.name)}">
-          <div class="cell">${e.image ? `<img src="${esc(e.image)}" alt="" loading="lazy">` : ""}
-          <div><div class="k">${esc(cell.kind)}</div>${c.body}</div></div></td>`;
-      }
-      if (layout.gapAfter.has(i)) html += gap;
-    });
-    html += `</tr>`;
-  }
-  html += `</tbody></table>`;
+  const cellHtml = (text, i) => {
+    const cell = layoutCell(text, layout.headers[i]);
+    const e = cell && (cell.special ? specials.get(cell.kind) : byKey.get(`${cell.kind}|${cell.tier}`));
+    if (!cell) return `<td class="empty"></td>`;
+    if (!e) return `<td class="missing" title="${esc(text)}: no price data"><div class="cell"><span class="muted">${esc(cell.kind)}</span></div></td>`;
+    placed.add(e.id);
+    const c = cellFn(e, cell);
+    const dim = q && !e.name.toLowerCase().includes(q) ? " dim" : "";
+    const style = `--h:${(c.heat ?? 0).toFixed(3)}${c.heatColor ? `;--hc:${c.heatColor}` : ""}`;
+    return `<td class="${cell.special ? "special-cell" : ""}${dim}" style="${style}" data-id="${esc(e.id)}" title="${esc(c.title ?? e.name)}">
+      <div class="cell">${e.image ? `<img src="${esc(e.image)}" alt="" loading="lazy">` : ""}
+      <div><div class="k">${esc(cell.kind)}</div>${c.body}</div></div></td>`;
+  };
+
+  let html = `<div class="stash-grid">`;
+  sections.forEach((cols, s) => {
+    const sep = s < sections.length - 1; // separator column after every section but the last
+    html += `<table class="grid stash"><thead><tr>`;
+    for (const i of cols) html += `<th>${esc(layout.headers[i])}</th>`;
+    if (sep) html += `<th class="gap"></th>`;
+    html += `</tr></thead><tbody>`;
+    for (const row of layout.rows) {
+      html += `<tr>${cols.map((i) => cellHtml(row[i], i)).join("")}`;
+      if (sep) html += `<td class="gap" aria-hidden="true"></td>`;
+      html += `</tr>`;
+    }
+    html += `</tbody></table>`;
+  });
+  html += `</div>`;
   return { html, placed };
 }
 
@@ -234,7 +241,7 @@ function stashGrid() {
     }
     const r = plans.get(e.kind);
     const own = r ? r.own[e.tier] : 0, after = r ? r.after[e.tier] : 0;
-    const qtyHtml = own === after ? `${own}` : `${own} <span class="muted">→</span> ${after}`;
+    const qtyHtml = own === after ? `${own}` : `${own}<span class="arrow muted">→</span>${after}`;
     const step = r && stepOf(r, e.tier);
     const lines = [`${e.name}: you own ${own}.`];
     const idle = e.tier === "Deafening" ? "max tier" : own === 0 ? "—" : own < 3 ? "too few" : "keep";
@@ -495,10 +502,27 @@ function initStash() {
   });
 }
 
+// The stash grid's full side-by-side width is the page's content column (centered on wide screens).
+// When the available width is smaller than that, stack the grid's sections and hide the separators.
+// The full width is measured unstacked and remembered, so stacking can't flip back and forth.
+function layoutStashGrids() {
+  for (const wrap of document.querySelectorAll(".stash-grid")) {
+    if (!wrap.offsetParent) continue; // hidden view
+    if (!wrap.dataset.full) {
+      wrap.classList.remove("stacked");
+      const full = [...wrap.children].reduce((sum, t) => sum + t.offsetWidth, 0);
+      wrap.dataset.full = full;
+      document.documentElement.style.setProperty("--content-w", `${full}px`);
+    }
+    wrap.classList.toggle("stacked", wrap.clientWidth < Number(wrap.dataset.full));
+  }
+}
+
 function render() {
   for (const v of VIEWS) $(`#${v}-view`).hidden = state.view !== v;
   if (!state.data) return;
   ({ grid: renderGrid, list: renderList, upgrade: () => { renderStash(); renderUpgradeGrid(); renderUpgrades(); } })[state.view]();
+  layoutStashGrids();
   const div = state.data.divinePrice ? ` · 1 div = ${state.data.divinePrice}c` : "";
   $("#status").textContent = `${state.data.essences.length} essences · updated ${ago(state.data.fetchedAt)}${div}`;
 }
@@ -658,6 +682,7 @@ async function init() {
     .then((layout) => { state.layout = layout; })
     .catch((err) => { state.layoutError = `Couldn't load stash layout (${err.message}).`; })
     .finally(render);
+  window.addEventListener("resize", layoutStashGrids);
   await fetchData();
   setInterval(fetchData, 10 * 60 * 1000); // server caches for 30 min; this just picks up new data
   setInterval(render, 60 * 1000);          // keep "updated N min ago" fresh

@@ -1,4 +1,7 @@
 :root {
+  /* Content column width; app.js sets it to the stash grid's measured width. */
+  --content-w: 708px;
+  --gutter: 24px;
   --bg: #f6f4ef;
   --panel: #ffffff;
   --text: #1d1b18;
@@ -61,10 +64,11 @@ a { color: var(--accent); }
 header {
   display: flex; flex-wrap: wrap; gap: 12px 24px;
   align-items: center; justify-content: space-between;
-  padding: 16px 24px; border-bottom: 1px solid var(--border);
+  padding: 16px var(--pad-x); border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--bg); z-index: 5;
 }
-.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; flex: 1 1 100%; }
+.brand .seg { margin-left: auto; align-self: center; }
 h1 { font-size: 20px; margin: 0; letter-spacing: .01em; }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
@@ -80,8 +84,10 @@ input[type=search] { width: 160px; }
 .seg button:last-child { border-radius: 0 6px 6px 0; }
 .seg button.on { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 
-main { padding: 16px 24px; overflow-x: auto; }
-footer { padding: 16px 24px 32px; font-size: 12px; }
+/* Center everything on wide screens, using the grid's width as the content column. */
+header, main, footer { --pad-x: max(var(--gutter), calc((100% - var(--content-w)) / 2)); }
+main { padding: 16px var(--pad-x); overflow-x: auto; }
+footer { padding: 16px var(--pad-x) 32px; font-size: 12px; }
 
 /* grid */
 .grid { border-collapse: separate; border-spacing: 3px; min-width: 400px; }
@@ -96,6 +102,7 @@ footer { padding: 16px 24px 32px; font-size: 12px; }
 .grid td.missing { background: transparent; border-style: dashed; cursor: default; }
 .grid td.dim { opacity: .25; }
 .grid .k { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.grid .arrow { margin: 0 2px; }
 .grid td.special-cell { border-color: var(--accent); }
 /* separator between the two halves of the stash tab */
 .grid .gap { min-width: 28px; width: 28px; padding: 0; background: none; border: none; cursor: default; position: relative; }
@@ -107,6 +114,20 @@ footer { padding: 16px 24px 32px; font-size: 12px; }
 .grid tbody tr:first-child .gap::before { top: 0; }
 .grid tbody tr:last-child .gap::before { bottom: 0; }
 .grid.stash th:not(.gap), .grid.stash td:not(.gap) { width: 108px; min-width: 108px; }
+/* Each half of the stash grid is its own table; they sit side by side, or stack on narrow screens. */
+.stash-grid { display: flex; align-items: flex-start; }
+.stash-grid > table { flex: none; }
+.grid.stash { min-width: 0; }
+.grid.stash td:not(.gap) { height: 62px; } /* equal row heights keep the halves aligned */
+.stash-grid.stacked { flex-direction: column; align-items: center; gap: 12px; }
+.stash-grid.stacked .gap { display: none; }
+/* Fixed-width cell contents so every column is exactly the same width; long text is clipped
+   with an ellipsis (the full name and values are in the hover title). 108px cell - 16px padding - 2px border. */
+.grid.stash .cell { width: 90px; }
+.grid.stash .cell > div { min-width: 0; flex: 1; }
+.grid.stash .cell .k, .grid.stash .cell .p, .grid.stash .cell .c {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .grid td[data-id]:hover { outline: 2px solid var(--accent); }
 .cell { display: flex; align-items: center; gap: 6px; }
 .cell img { width: 26px; height: 26px; }
@@ -185,6 +206,6 @@ svg.chart { width: 100%; height: 160px; display: block; }
 svg.chart text { fill: var(--muted); font-size: 10px; }
 
 @media (max-width: 600px) {
-  header, main, footer { padding-left: 16px; padding-right: 16px; }
+  :root { --gutter: 16px; }
   input[type=search] { width: 100%; }
 }
