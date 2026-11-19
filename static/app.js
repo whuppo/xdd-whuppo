@@ -68,44 +68,95 @@ function filtered() {
   return q ? all.filter((e) => e.name.toLowerCase().includes(q)) : all;
 }
 
+// ---------- stash tab layout ----------
+
+// essence_tab.txt mirrors the in-game essence stash tab: tab-separated, first line holds the
+// tier for each column, other cells hold an essence type ("Greed") or "(special) Name". Empty cells are intentional.
+const SPECIAL_PREFIX = "(special)";
+
+async function loadLayout() {
+  const text = await fetch("essence_tab.txt").then((r) => {
+    if (!r.ok) throw new Error(`essence_tab.txt: ${r.status}`);
+    return r.text();
+  });
+  const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim() !== "");
+  const headers = lines[0].split("\t").map((s) => s.trim());
+  const rows = lines.slice(1).map((l) => {
+    const cells = l.split("\t").map((s) => s.trim());
+    while (cells.length < headers.length) cells.push("");
+    return cells.slice(0, headers.length);
+  });
+  // Put a visible gap wherever the same tier appears in two adjacent columns (Screaming | Screaming).
+  const gapAfter = new Set();
+  for (let i = 0; i < headers.length - 1; i++) if (headers[i] === headers[i + 1]) gapAfter.add(i);
+  return { headers, rows, gapAfter };
+}
+
+function layoutCell(text, tier) {
+  if (!text) return null;
+  if (text.startsWith(SPECIAL_PREFIX)) return { special: true, kind: text.slice(SPECIAL_PREFIX.length).trim() };
+  return { special: false, kind: text, tier };
+}
+
 function renderGrid() {
-  const items = filtered();
-  const tiered = items.filter((e) => e.tier);
-  const specials = items.filter((e) => !e.tier).sort((a, b) => (b.chaos ?? 0) - (a.chaos ?? 0));
-
-  // Heat shading is relative within each tier column, so you can spot the valuable type at a glance.
-  const maxByTier = {};
-  for (const e of tiered) maxByTier[e.tier] = Math.max(maxByTier[e.tier] ?? 0, e.chaos ?? 0);
-
-  const kinds = [...new Set(tiered.map((e) => e.kind))].sort();
-  const byKey = new Map(tiered.map((e) => [`${e.kind}|${e.tier}`, e]));
-
-  let html = "";
-  if (kinds.length) {
-    html += `<table class="grid"><thead><tr><th></th>${TIERS.map((t) => `<th>${t}</th>`).join("")}</tr></thead><tbody>`;
-    for (const kind of kinds) {
-      html += `<tr><th class="row">${esc(kind)}</th>`;
-      for (const t of TIERS) {
-        const e = byKey.get(`${kind}|${t}`);
-        if (!e) { html += `<td class="empty"></td>`; continue; }
-        const heat = maxByTier[t] ? ((e.chaos ?? 0) / maxByTier[t]) * 0.35 : 0;
-        html += `<td style="--h:${heat.toFixed(3)}" data-id="${esc(e.id)}" title="${esc(e.name)}">
-          <div class="cell">${e.image ? `<img src="${esc(e.image)}" alt="" loading="lazy">` : ""}
-          <div><div class="p">${price(e.chaos)}</div><div class="c">${change(e.change)}</div></div></div></td>`;
-      }
-      html += `</tr>`;
-    }
-    html += `</tbody></table>`;
+  const layout = state.layout;
+  if (!layout) {
+    $("#grid-view").innerHTML = `<p class="muted">${esc(state.layoutError || "Loading layout…")}</p>`;
+    return;
   }
-  if (specials.length) {
-    html += `<h2>Special essences</h2><div class="specials">`;
-    for (const e of specials) {
+  const essences = state.data.essences;
+  const byKey = new Map(essences.filter((e) => e.tier).map((e) => [`${e.kind}|${e.tier}`, e]));
+  const specials = new Map(essences.filter((e) => !e.tier).map((e) => [e.kind, e]));
+
+  // Heat shading is relative within each tier, so you can spot the valuable type at a glance.
+  const maxByTier = {};
+  for (const e of essences) if (e.tier) maxByTier[e.tier] = Math.max(maxByTier[e.tier] ?? 0, e.chaos ?? 0);
+
+  const q = state.search.trim().toLowerCase();
+  const gap = `<td class="gap" aria-hidden="true"></td>`;
+  const placed = new Set();
+
+  let html = `<table class="grid stash"><thead><tr>`;
+  layout.headers.forEach((h, i) => {
+    html += `<th>${esc(h)}</th>`;
+    if (layout.gapAfter.has(i)) html += `<th class="gap"></th>`;
+  });
+  html += `</tr></thead><tbody>`;
+
+  for (const row of layout.rows) {
+    html += `<tr>`;
+    row.forEach((text, i) => {
+      const cell = layoutCell(text, layout.headers[i]);
+      const e = cell && (cell.special ? specials.get(cell.kind) : byKey.get(`${cell.kind}|${cell.tier}`));
+      if (!cell) {
+        html += `<td class="empty"></td>`;
+      } else if (!e) {
+        html += `<td class="missing" title="${esc(text)}: no price data"><div class="cell"><span class="muted">${esc(cell.kind)}</span></div></td>`;
+      } else {
+        placed.add(e.id);
+        const heat = !cell.special && maxByTier[e.tier] ? ((e.chaos ?? 0) / maxByTier[e.tier]) * 0.35 : 0;
+        const dim = q && !e.name.toLowerCase().includes(q) ? " dim" : "";
+        html += `<td class="${cell.special ? "special-cell" : ""}${dim}" style="--h:${heat.toFixed(3)}" data-id="${esc(e.id)}" title="${esc(e.name)}">
+          <div class="cell">${e.image ? `<img src="${esc(e.image)}" alt="" loading="lazy">` : ""}
+          <div>${`<div class="k">${esc(cell.kind)}</div>`}<div class="p">${price(e.chaos)}</div><div class="c">${change(e.change)}</div></div></div></td>`;
+      }
+      if (layout.gapAfter.has(i)) html += gap;
+    });
+    html += `</tr>`;
+  }
+  html += `</tbody></table>`;
+
+  // Anything poe.ninja lists that the layout file doesn't place (e.g. a new essence) still gets shown.
+  const extra = essences.filter((e) => !placed.has(e.id) && (!q || e.name.toLowerCase().includes(q)));
+  if (extra.length) {
+    html += `<h2>Not in stash layout</h2><div class="specials">`;
+    for (const e of extra) {
       html += `<div class="special" data-id="${esc(e.id)}">${e.image ? `<img src="${esc(e.image)}" alt="" loading="lazy">` : ""}
         <div><div>${esc(e.name)}</div><b>${price(e.chaos)}</b> ${change(e.change)}</div></div>`;
     }
     html += `</div>`;
   }
-  $("#grid-view").innerHTML = html || `<p class="muted">No essences match.</p>`;
+  $("#grid-view").innerHTML = html;
 }
 
 function renderList() {
@@ -350,6 +401,10 @@ async function init() {
     if (el) openDetail(el.dataset.id);
   });
 
+  loadLayout()
+    .then((layout) => { state.layout = layout; })
+    .catch((err) => { state.layoutError = `Couldn't load stash layout (${err.message}).`; })
+    .finally(render);
   await fetchData();
   setInterval(fetchData, 10 * 60 * 1000); // server caches for 30 min; this just picks up new data
   setInterval(render, 60 * 1000);          // keep "updated N min ago" fresh

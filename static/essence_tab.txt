@@ -1,0 +1,13 @@
+Deafening	Shrieking	Screaming	Screaming	Shrieking	Deafening
+Greed	Greed	Greed	Loathing	Loathing	Loathing
+Contempt	Contempt	Contempt	Zeal	Zeal	Zeal
+Hatred	Hatred	Hatred	Anguish	Anguish	Anguish
+Woe	Woe	Woe	Spite	Spite	Spite
+Fear	Fear	Fear	Scorn	Scorn	Scorn
+Anger	Anger	Anger	Envy	Envy	Envy
+Torment	Torment	Torment	Misery	Misery	Misery
+Sorrow	Sorrow	Sorrow	Dread	Dread	Dread
+Rage	Rage	Rage			(special) Insanity
+Suffering	Suffering	Suffering		(special) Desolation	(special) Horror
+Wrath	Wrath	Wrath		(special) Trickery	(special) Delirium
+Doubt	Doubt	Doubt			(special) Hysteria

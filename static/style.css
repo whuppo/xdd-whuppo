@@ -84,6 +84,16 @@ footer { padding: 16px 24px 32px; font-size: 12px; }
   background-image: linear-gradient(rgba(var(--heat), var(--h, 0)), rgba(var(--heat), var(--h, 0)));
 }
 .grid td.empty { background: transparent; border-color: transparent; cursor: default; }
+.grid td.missing { background: transparent; border-style: dashed; cursor: default; }
+.grid td.dim { opacity: .25; }
+.grid .k { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.grid td.special-cell { border-color: var(--accent); }
+/* separator between the two halves of the stash tab */
+.grid .gap { min-width: 28px; width: 28px; padding: 0; background: none; border: none; cursor: default;
+  background-image: linear-gradient(var(--border), var(--border)); background-size: 2px 100%;
+  background-position: center; background-repeat: no-repeat; }
+.grid thead .gap { background-image: none; }
+.grid.stash th:not(.gap), .grid.stash td:not(.gap) { width: 108px; min-width: 108px; }
 .grid td:not(.empty):hover { outline: 2px solid var(--accent); }
 .cell { display: flex; align-items: center; gap: 6px; }
 .cell img { width: 26px; height: 26px; }
