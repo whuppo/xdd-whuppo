@@ -260,7 +260,7 @@ function stashGrid() {
         lines.push(`Loses money on its own, but the extra Shrieking allow more Shrieking → Deafening upgrades, so the plan comes out ahead.`);
       }
     } else if (r && after > own) {
-      sub = `<span class="up">+${after - own} made</span>`;
+      sub = `<span class="up">+${after - own}</span>`;
       lines.push(`Gains ${after - own} from upgrading the tier below.`);
     } else if (step && own >= 3) {
       heat = DECISION_SHADE;
@@ -515,6 +515,19 @@ function layoutStashGrids() {
       document.documentElement.style.setProperty("--content-w", `${full}px`);
     }
     wrap.classList.toggle("stacked", wrap.clientWidth < Number(wrap.dataset.full));
+    wrap.querySelectorAll(".cell .p, .cell .c").forEach(fitText);
+  }
+}
+
+// Shrink a cell line's font just enough to fit its fixed width (e.g. "1144→1454").
+// Short values keep the normal size; anything still too long at the minimum falls back to the CSS ellipsis.
+function fitText(el) {
+  el.style.fontSize = "";
+  if (el.scrollWidth <= el.clientWidth) return;
+  let size = parseFloat(getComputedStyle(el).fontSize);
+  while (el.scrollWidth > el.clientWidth && size > 9) {
+    size -= 0.5;
+    el.style.fontSize = `${size}px`;
   }
 }
 
