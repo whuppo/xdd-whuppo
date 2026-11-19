@@ -8,7 +8,7 @@ name: Update prices and deploy
 
 on:
   schedule:
-    - cron: "7,37 * * * *" # every 30 min; off the :00/:30 rush when GitHub delays scheduled runs most
+    - cron: "0,30 * * * *" # every 30 min, on the hour and half hour (UTC); GitHub may start these a few minutes late
   push:
     branches: [main]
   workflow_dispatch:

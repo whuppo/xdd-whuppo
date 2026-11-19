@@ -46,7 +46,7 @@ Needs only Python 3. It fetches prices on startup and every 30 minutes into `dat
 
 ## Deploy (GitHub Pages)
 
-`.github/workflows/pages.yml` runs every 30 minutes, on every push to `main`, and on demand (Actions → "Update prices and deploy" → Run workflow). Each run:
+`.github/workflows/pages.yml` runs every 30 minutes (at :00 and :30), on every push to `main`, and on demand (Actions → "Update prices and deploy" → Run workflow). Each run:
 
 1. restores the previous data from the `data` branch,
 2. runs `update_data.py` to add the latest prices,
