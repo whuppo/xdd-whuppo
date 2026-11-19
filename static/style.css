@@ -10,6 +10,7 @@
   --heat: 168, 100, 30;
   --up-rgb: 31, 138, 76;
   --down-rgb: 194, 65, 45;
+  --warn-rgb: 202, 138, 4;
   color-scheme: light;
 }
 /* Dark palette: used when the OS prefers dark (unless forced light), or when forced dark. */
@@ -26,6 +27,7 @@
     --heat: 224, 163, 90;
     --up-rgb: 76, 194, 127;
     --down-rgb: 239, 107, 85;
+    --warn-rgb: 234, 179, 8;
     color-scheme: dark;
   }
 }
@@ -41,6 +43,7 @@
   --heat: 224, 163, 90;
   --up-rgb: 76, 194, 127;
   --down-rgb: 239, 107, 85;
+  --warn-rgb: 234, 179, 8;
   color-scheme: dark;
 }
 #theme { min-width: 84px; }
@@ -133,6 +136,13 @@ td.name img { width: 24px; height: 24px; }
 .intro { margin: 0 0 8px; max-width: 70ch; }
 .check { display: inline-flex; gap: 6px; align-items: center; margin-bottom: 8px; cursor: pointer; }
 .stash-box { margin-bottom: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i {
+  width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border);
+  background: var(--panel) linear-gradient(rgba(var(--sw), .25), rgba(var(--sw), .25));
+}
+.legend i.none { background: var(--panel); }
 .stash-box h2 { margin-top: 8px; }
 .drop {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;

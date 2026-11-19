@@ -181,8 +181,16 @@ function renderUpgradeGrid() {
   const stashMode = !!state.stash && state.upgradeGridMode !== "unit";
   $("#upgrade-grid-title").textContent = stashMode ? "Your stash: best upgrade plan" : "Upgrade profit per essence";
   if (layoutPending("#upgrade-grid")) return;
-  $("#upgrade-grid").innerHTML = (stashMode ? stashGrid() : unitGrid()).html;
+  $("#upgrade-grid").innerHTML = (stashMode ? STASH_LEGEND : "") + (stashMode ? stashGrid() : unitGrid()).html;
 }
+
+const STASH_LEGEND = `
+  <div class="legend" aria-label="Color key">
+    <span><i style="--sw:var(--up-rgb)"></i>Upgrade the whole stack</span>
+    <span><i style="--sw:var(--warn-rgb)"></i>Upgrade part of the stack</span>
+    <span><i style="--sw:var(--down-rgb)"></i>Hold, upgrading loses money</span>
+    <span><i class="none"></i>Nothing to decide (max tier, special, or fewer than 3)</span>
+  </div>`;
 
 function unitGrid() {
   const next = new Map(computeUpgrades(state.data.essences).filter((u) => u.count === 3).map((u) => [u.from.id, u]));
@@ -212,7 +220,8 @@ function stashGrid() {
     tier === "Screaming" ? { n: r.a, unit: r.p1, to: "Shrieking" }
     : tier === "Shrieking" ? { n: r.b, unit: r.p2, to: "Deafening" }
     : null;
-  // Flat decision colors, not a gradient: green = upgrade this, red = hold it.
+  // Flat decision colors, not a gradient: green = upgrade the whole stack, yellow = upgrade part of it
+  // (3 or more left over), red = hold it.
   const DECISION_SHADE = 0.25;
 
   return stashGridHtml((e) => {
@@ -236,7 +245,9 @@ function stashGrid() {
       const profit = step.n * step.unit;
       sub = profitHtml(profit);
       heat = DECISION_SHADE;
-      heatColor = "var(--up-rgb)";
+      const partial = after >= 3;
+      heatColor = partial ? "var(--warn-rgb)" : "var(--up-rgb)";
+      if (partial) lines.push(`Partial: upgrade only ${3 * step.n} and keep ${after}. Upgrading more isn't worth it at current prices.`);
       lines.push(`Vendor ${3 * step.n} → ${step.n} ${step.to} (${step.n} × ${profitHtml(step.unit).replace(/<[^>]+>/g, "")} = ${profitHtml(profit).replace(/<[^>]+>/g, "")}).`);
       if (e.tier === "Screaming" && step.unit < 0 && r.b) {
         lines.push(`Loses money on its own, but the extra Shrieking allow more Shrieking → Deafening upgrades, so the plan comes out ahead.`);
