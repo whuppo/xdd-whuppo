@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Essence Prices</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>Essence Prices</h1>
+    <span id="status" class="muted"></span>
+  </div>
+  <div class="controls">
+    <select id="league" aria-label="League"></select>
+    <div class="seg" role="group" aria-label="View">
+      <button data-view="grid" class="on">Grid</button>
+      <button data-view="list">List</button>
+    </div>
+    <div class="seg" role="group" aria-label="Currency">
+      <button data-cur="chaos" class="on">Chaos</button>
+      <button data-cur="divine">Divine</button>
+    </div>
+    <input id="search" type="search" placeholder="Filter…" aria-label="Filter essences">
+  </div>
+</header>
+
+<main>
+  <section id="grid-view"></section>
+  <section id="list-view" hidden>
+    <table id="list">
+      <thead>
+        <tr>
+          <th data-sort="name">Essence</th>
+          <th data-sort="chaos" class="num">Price</th>
+          <th data-sort="change" class="num">7d</th>
+          <th class="spark-col">Trend</th>
+          <th data-sort="volume" class="num">Volume</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+
+<dialog id="detail">
+  <form method="dialog"><button class="close" aria-label="Close">×</button></form>
+  <div id="detail-body"></div>
+</dialog>
+
+<footer class="muted">
+  Data from <a href="https://poe.ninja" target="_blank" rel="noopener">poe.ninja</a> (Currency Exchange). Refreshed every 30 min.
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
