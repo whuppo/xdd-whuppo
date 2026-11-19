@@ -98,12 +98,16 @@ footer { padding: 16px 24px 32px; font-size: 12px; }
 .grid .k { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .grid td.special-cell { border-color: var(--accent); }
 /* separator between the two halves of the stash tab */
-.grid .gap { min-width: 28px; width: 28px; padding: 0; background: none; border: none; cursor: default;
-  background-image: linear-gradient(var(--border), var(--border)); background-size: 2px 100%;
-  background-position: center; background-repeat: no-repeat; }
-.grid thead .gap { background-image: none; }
+.grid .gap { min-width: 28px; width: 28px; padding: 0; background: none; border: none; cursor: default; position: relative; }
+/* The line overhangs each cell by the table's 3px border-spacing so it reads as one unbroken separator. */
+.grid tbody .gap::before {
+  content: ""; position: absolute; left: calc(50% - 1px); width: 2px;
+  top: -3px; bottom: -3px; background: var(--border);
+}
+.grid tbody tr:first-child .gap::before { top: 0; }
+.grid tbody tr:last-child .gap::before { bottom: 0; }
 .grid.stash th:not(.gap), .grid.stash td:not(.gap) { width: 108px; min-width: 108px; }
-.grid td:not(.empty):hover { outline: 2px solid var(--accent); }
+.grid td[data-id]:hover { outline: 2px solid var(--accent); }
 .cell { display: flex; align-items: center; gap: 6px; }
 .cell img { width: 26px; height: 26px; }
 .cell .p { font-weight: 600; font-variant-numeric: tabular-nums; }
