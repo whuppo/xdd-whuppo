@@ -17,6 +17,7 @@
     <div class="seg" role="group" aria-label="View">
       <button data-view="grid" class="on">Grid</button>
       <button data-view="list">List</button>
+      <button data-view="upgrade">Upgrade</button>
     </div>
     <div class="seg" role="group" aria-label="Currency">
       <button data-cur="chaos" class="on">Chaos</button>
@@ -37,6 +38,27 @@
           <th data-sort="change" class="num">7d</th>
           <th class="spark-col">Trend</th>
           <th data-sort="volume" class="num">Volume</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+  <section id="upgrade-view" hidden>
+    <p class="muted intro">
+      Vendor 3 of an essence to get 1 of the next tier. Profit = next-tier price − 3 × this tier's price.
+      Two steps (9 Screaming → 1 Deafening) are included too.
+    </p>
+    <label class="check"><input type="checkbox" id="profitable-only"> Profitable only</label>
+    <table id="upgrades">
+      <thead>
+        <tr>
+          <th data-usort="kind">Essence</th>
+          <th data-usort="step">Upgrade</th>
+          <th data-usort="cost" class="num">Cost</th>
+          <th data-usort="value" class="num">Result</th>
+          <th data-usort="profit" class="num">Profit</th>
+          <th data-usort="roi" class="num">ROI</th>
+          <th data-usort="volume" class="num">Result volume</th>
         </tr>
       </thead>
       <tbody></tbody>

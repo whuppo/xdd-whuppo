@@ -2,9 +2,11 @@
 
 A small website that tracks Path of Exile essence prices from [poe.ninja](https://poe.ninja).
 
-- **Grid view:** essence types × tiers (Whispering → Deafening), shaded by relative value within each tier, with 7-day change.
+- **Grid view:** essence types × tiers (Screaming, Shrieking, Deafening), shaded by relative value within each tier, with 7-day change.
 - **List view:** sortable by price, 7-day change or volume, with sparklines.
-- **Detail view:** click any essence to see poe.ninja's 7-day trend and the history this tracker has recorded.
+- **Upgrade view:** profit from the 3:1 vendor recipe (3 Screaming → 1 Shrieking, 3 Shrieking → 1 Deafening) and the 9:1 two-step, sortable by profit or ROI.
+- **Detail view:** click any essence to see its upgrade profit, poe.ninja's 7-day trend and the history this tracker has recorded.
+- Lower tiers (Whispering through Wailing) aren't tracked, since they barely show up in the game.
 - Prices in chaos or divine, league selector, and a text filter.
 
 ## Run

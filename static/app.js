@@ -1,4 +1,6 @@
-const TIERS = ["Whispering", "Muttering", "Weeping", "Wailing", "Screaming", "Shrieking", "Deafening"];
+// Only the tiers that actually drop in meaningful numbers; the server filters out the rest.
+const TIERS = ["Screaming", "Shrieking", "Deafening"];
+const VIEWS = ["grid", "list", "upgrade"];
 
 const state = {
   league: null,
@@ -7,6 +9,8 @@ const state = {
   currency: "chaos",
   search: "",
   sort: { key: "chaos", asc: false },
+  usort: { key: "profit", asc: false },
+  profitableOnly: false,
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -81,7 +85,7 @@ function renderGrid() {
     html += `<table class="grid"><thead><tr><th></th>${TIERS.map((t) => `<th>${t}</th>`).join("")}</tr></thead><tbody>`;
     for (const kind of kinds) {
       html += `<tr><th class="row">${esc(kind)}</th>`;
-      for (let t = 1; t <= TIERS.length; t++) {
+      for (const t of TIERS) {
         const e = byKey.get(`${kind}|${t}`);
         if (!e) { html += `<td class="empty"></td>`; continue; }
         const heat = maxByTier[t] ? ((e.chaos ?? 0) / maxByTier[t]) * 0.35 : 0;
@@ -125,11 +129,73 @@ function renderList() {
     </tr>`).join("");
 }
 
+// ---------- upgrades ----------
+
+// Every 3:1 vendor upgrade (plus the 9:1 two-step), across all essence types.
+function computeUpgrades(essences) {
+  const byKey = new Map(essences.filter((e) => e.tier).map((e) => [`${e.kind}|${e.tier}`, e]));
+  const steps = [];
+  for (let i = 0; i < TIERS.length - 1; i++) {
+    for (let j = i + 1; j < TIERS.length; j++) steps.push([TIERS[i], TIERS[j], 3 ** (j - i)]);
+  }
+  const out = [];
+  for (const kind of new Set(essences.filter((e) => e.tier).map((e) => e.kind))) {
+    for (const [fromTier, toTier, count] of steps) {
+      const from = byKey.get(`${kind}|${fromTier}`), to = byKey.get(`${kind}|${toTier}`);
+      if (from?.chaos == null || to?.chaos == null) continue;
+      const cost = from.chaos * count;
+      out.push({
+        kind, from, to, count, cost,
+        step: `${count} ${fromTier} → 1 ${toTier}`,
+        stepOrder: TIERS.indexOf(fromTier) * 10 + TIERS.indexOf(toTier),
+        value: to.chaos,
+        profit: to.chaos - cost,
+        roi: cost ? (to.chaos - cost) / cost * 100 : null,
+        volume: to.volume,
+      });
+    }
+  }
+  return out;
+}
+
+function profitHtml(p) {
+  const cls = p > 0 ? "up" : p < 0 ? "down" : "muted";
+  return `<span class="${cls}">${p > 0 ? "+" : p < 0 ? "−" : ""}${price(Math.abs(p))}</span>`;
+}
+
+function renderUpgrades() {
+  const q = state.search.trim().toLowerCase();
+  let rows = computeUpgrades(state.data.essences)
+    .filter((u) => !q || u.from.name.toLowerCase().includes(q) || u.to.name.toLowerCase().includes(q));
+  if (state.profitableOnly) rows = rows.filter((u) => u.profit > 0);
+
+  const { key, asc } = state.usort;
+  const sortKey = key === "step" ? "stepOrder" : key;
+  rows.sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    const r = typeof x === "string" ? x.localeCompare(y) : (x ?? -Infinity) - (y ?? -Infinity);
+    return asc ? r : -r;
+  });
+  document.querySelectorAll("#upgrades th[data-usort]").forEach((th) => {
+    th.classList.toggle("sorted", th.dataset.usort === key);
+    th.classList.toggle("asc", th.dataset.usort === key && asc);
+  });
+  $("#upgrades tbody").innerHTML = rows.length ? rows.map((u) => `
+    <tr data-id="${esc(u.from.id)}">
+      <td class="name">${u.to.image ? `<img src="${esc(u.to.image)}" alt="" loading="lazy">` : ""}${esc(u.kind)}</td>
+      <td class="step">${esc(u.step)}</td>
+      <td class="num">${price(u.cost)}</td>
+      <td class="num">${price(u.value)}</td>
+      <td class="num profit">${profitHtml(u.profit)}</td>
+      <td class="num">${u.roi == null ? "—" : change(u.roi)}</td>
+      <td class="num">${volume(u.volume)}</td>
+    </tr>`).join("") : `<tr><td colspan="7" class="muted">No upgrades match.</td></tr>`;
+}
+
 function render() {
-  $("#grid-view").hidden = state.view !== "grid";
-  $("#list-view").hidden = state.view !== "list";
+  for (const v of VIEWS) $(`#${v}-view`).hidden = state.view !== v;
   if (!state.data) return;
-  state.view === "grid" ? renderGrid() : renderList();
+  ({ grid: renderGrid, list: renderList, upgrade: renderUpgrades })[state.view]();
   const div = state.data.divinePrice ? ` · 1 div = ${state.data.divinePrice}c` : "";
   $("#status").textContent = `${state.data.essences.length} essences · updated ${ago(state.data.fetchedAt)}${div}`;
 }
@@ -172,6 +238,11 @@ async function openDetail(id) {
       <div><span>7d change</span><b>${change(e.change) || "—"}</b></div>
       <div><span>Volume</span><b>${volume(e.volume)}</b></div>
     </div>
+    ${computeUpgrades(state.data.essences).filter((u) => u.from.id === e.id).map((u) => `
+      <div class="upgrade-box">
+        <div><span>${esc(u.step)}</span><b>${profitHtml(u.profit)}</b></div>
+        <div class="muted"><span>Cost ${price(u.cost)} → worth ${price(u.value)}</span><span>${change(u.roi)}</span></div>
+      </div>`).join("")}
     <div class="chart-title">Last 7 days (poe.ninja)</div>
     ${lineChart(week, (y) => price(y), (x) => (x === 0 ? "today" : `${-x}d ago`)) || `<p class="muted">No trend data.</p>`}
     <div class="chart-title">Recorded by this tracker</div>
@@ -211,7 +282,7 @@ async function init() {
   const leagues = await fetch("/api/leagues").then((r) => r.json()).catch(() => ["Standard"]);
   const saved = load("league", null);
   state.league = leagues.includes(saved) ? saved : leagues[0];
-  state.view = load("view", "grid");
+  state.view = VIEWS.includes(load("view", "grid")) ? load("view", "grid") : "grid";
   state.currency = load("currency", "chaos");
 
   const sel = $("#league");
@@ -240,6 +311,12 @@ async function init() {
     state.sort = { key, asc: state.sort.key === key ? !state.sort.asc : key === "name" };
     render();
   }));
+  document.querySelectorAll("#upgrades th[data-usort]").forEach((th) => th.addEventListener("click", () => {
+    const key = th.dataset.usort;
+    state.usort = { key, asc: state.usort.key === key ? !state.usort.asc : key === "kind" || key === "step" };
+    render();
+  }));
+  $("#profitable-only").addEventListener("change", (ev) => { state.profitableOnly = ev.target.checked; render(); });
   document.querySelector("main").addEventListener("click", (ev) => {
     const el = ev.target.closest("[data-id]");
     if (el) openDetail(el.dataset.id);

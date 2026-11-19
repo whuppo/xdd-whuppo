@@ -28,8 +28,10 @@ LEAGUES_TTL = 60 * 60
 SNAPSHOT_MIN_GAP = 25 * 60  # don't store two snapshots for a league closer than this
 POLL_INTERVAL = 30 * 60
 
-TIERS = ["Whispering", "Muttering", "Weeping", "Wailing", "Screaming", "Shrieking", "Deafening"]
-TIER_RE = re.compile(r"^(%s) Essence of (.+)$" % "|".join(TIERS))
+ALL_TIERS = ["Whispering", "Muttering", "Weeping", "Wailing", "Screaming", "Shrieking", "Deafening"]
+# Lower tiers barely show up in the actual game, so we don't track them.
+TRACKED_TIERS = {"Screaming", "Shrieking", "Deafening"}
+TIER_RE = re.compile(r"^(%s) Essence of (.+)$" % "|".join(ALL_TIERS))
 
 _cache = {}
 _cache_lock = threading.Lock()
@@ -71,7 +73,7 @@ def get_leagues():
 def classify(name):
     m = TIER_RE.match(name)
     if m:
-        return m.group(2), TIERS.index(m.group(1)) + 1
+        return m.group(2), m.group(1)
     # Special essences (Hysteria, Insanity, Horror, Delirium, Desolation, ...)
     return name.replace("Essence of ", ""), None
 
@@ -86,6 +88,8 @@ def load_essences(league):
         item = items.get(line["id"], {})
         name = item.get("name", line["id"])
         kind, tier = classify(name)
+        if tier and tier not in TRACKED_TIERS:
+            continue
         spark = line.get("sparkline") or {}
         out.append({
             "id": line["id"],
