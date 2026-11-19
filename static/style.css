@@ -8,9 +8,11 @@
   --up: #1f8a4c;
   --down: #c2412d;
   --heat: 168, 100, 30;
+  color-scheme: light;
 }
+/* Dark palette: used when the OS prefers dark (unless forced light), or when forced dark. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #121110;
     --panel: #1b1a18;
     --text: #ece7dd;
@@ -20,8 +22,22 @@
     --up: #4cc27f;
     --down: #ef6b55;
     --heat: 224, 163, 90;
+    color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #121110;
+  --panel: #1b1a18;
+  --text: #ece7dd;
+  --muted: #958d80;
+  --border: #2e2b27;
+  --accent: #e0a35a;
+  --up: #4cc27f;
+  --down: #ef6b55;
+  --heat: 224, 163, 90;
+  color-scheme: dark;
+}
+#theme { min-width: 84px; }
 
 * { box-sizing: border-box; }
 body {

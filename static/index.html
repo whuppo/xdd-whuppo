@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Essence Prices</title>
 <link rel="stylesheet" href="style.css">
+<script>
+  // Apply the saved theme before first paint so there's no flash of the wrong colors.
+  try {
+    const t = localStorage.getItem("theme");
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  } catch {}
+</script>
 </head>
 <body>
 <header>
@@ -24,6 +31,9 @@
       <button data-cur="divine">Divine</button>
     </div>
     <input id="search" type="search" placeholder="Filter…" aria-label="Filter essences">
+    <div class="seg" role="group" aria-label="Theme">
+      <button id="theme" title="Theme: follows your system">◐ Auto</button>
+    </div>
   </div>
 </header>
 

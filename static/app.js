@@ -278,7 +278,35 @@ async function fetchData() {
   }
 }
 
+// ---------- theme ----------
+
+const THEMES = [
+  { id: "auto", label: "◐ Auto", title: "Theme: follows your system" },
+  { id: "light", label: "☀ Light", title: "Theme: light" },
+  { id: "dark", label: "☾ Dark", title: "Theme: dark" },
+];
+
+function applyTheme(id) {
+  const t = THEMES.find((x) => x.id === id) ?? THEMES[0];
+  if (t.id === "auto") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t.id;
+  const btn = $("#theme");
+  btn.textContent = t.label;
+  btn.title = `${t.title} (click to change)`;
+  return t.id;
+}
+
+function initTheme() {
+  let current = applyTheme(load("theme", "auto"));
+  $("#theme").addEventListener("click", () => {
+    const next = THEMES[(THEMES.findIndex((t) => t.id === current) + 1) % THEMES.length].id;
+    current = applyTheme(next);
+    save("theme", current);
+  });
+}
+
 async function init() {
+  initTheme();
   const leagues = await fetch("/api/leagues").then((r) => r.json()).catch(() => ["Standard"]);
   const saved = load("league", null);
   state.league = leagues.includes(saved) ? saved : leagues[0];
