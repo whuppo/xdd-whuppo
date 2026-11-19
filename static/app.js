@@ -98,20 +98,12 @@ function layoutCell(text, tier) {
   return { special: false, kind: text, tier };
 }
 
-function renderGrid() {
+// Builds the stash-tab table. cellFn(e, cell) returns { body, heat, heatColor, title } for one placed essence.
+function stashGridHtml(cellFn) {
   const layout = state.layout;
-  if (!layout) {
-    $("#grid-view").innerHTML = `<p class="muted">${esc(state.layoutError || "Loading layout…")}</p>`;
-    return;
-  }
   const essences = state.data.essences;
   const byKey = new Map(essences.filter((e) => e.tier).map((e) => [`${e.kind}|${e.tier}`, e]));
   const specials = new Map(essences.filter((e) => !e.tier).map((e) => [e.kind, e]));
-
-  // Heat shading is relative within each tier, so you can spot the valuable type at a glance.
-  const maxByTier = {};
-  for (const e of essences) if (e.tier) maxByTier[e.tier] = Math.max(maxByTier[e.tier] ?? 0, e.chaos ?? 0);
-
   const q = state.search.trim().toLowerCase();
   const gap = `<td class="gap" aria-hidden="true"></td>`;
   const placed = new Set();
@@ -134,19 +126,42 @@ function renderGrid() {
         html += `<td class="missing" title="${esc(text)}: no price data"><div class="cell"><span class="muted">${esc(cell.kind)}</span></div></td>`;
       } else {
         placed.add(e.id);
-        const heat = !cell.special && maxByTier[e.tier] ? ((e.chaos ?? 0) / maxByTier[e.tier]) * 0.35 : 0;
+        const c = cellFn(e, cell);
         const dim = q && !e.name.toLowerCase().includes(q) ? " dim" : "";
-        html += `<td class="${cell.special ? "special-cell" : ""}${dim}" style="--h:${heat.toFixed(3)}" data-id="${esc(e.id)}" title="${esc(e.name)}">
+        const style = `--h:${(c.heat ?? 0).toFixed(3)}${c.heatColor ? `;--hc:${c.heatColor}` : ""}`;
+        html += `<td class="${cell.special ? "special-cell" : ""}${dim}" style="${style}" data-id="${esc(e.id)}" title="${esc(c.title ?? e.name)}">
           <div class="cell">${e.image ? `<img src="${esc(e.image)}" alt="" loading="lazy">` : ""}
-          <div>${`<div class="k">${esc(cell.kind)}</div>`}<div class="p">${price(e.chaos)}</div><div class="c">${change(e.change)}</div></div></div></td>`;
+          <div><div class="k">${esc(cell.kind)}</div>${c.body}</div></div></td>`;
       }
       if (layout.gapAfter.has(i)) html += gap;
     });
     html += `</tr>`;
   }
   html += `</tbody></table>`;
+  return { html, placed };
+}
+
+function layoutPending(target) {
+  if (state.layout) return false;
+  $(target).innerHTML = `<p class="muted">${esc(state.layoutError || "Loading layout…")}</p>`;
+  return true;
+}
+
+function renderGrid() {
+  if (layoutPending("#grid-view")) return;
+  const essences = state.data.essences;
+
+  // Heat shading is relative within each tier, so you can spot the valuable type at a glance.
+  const maxByTier = {};
+  for (const e of essences) if (e.tier) maxByTier[e.tier] = Math.max(maxByTier[e.tier] ?? 0, e.chaos ?? 0);
+
+  let { html, placed } = stashGridHtml((e, cell) => ({
+    body: `<div class="p">${price(e.chaos)}</div><div class="c">${change(e.change)}</div>`,
+    heat: !cell.special && maxByTier[e.tier] ? ((e.chaos ?? 0) / maxByTier[e.tier]) * 0.35 : 0,
+  }));
 
   // Anything poe.ninja lists that the layout file doesn't place (e.g. a new essence) still gets shown.
+  const q = state.search.trim().toLowerCase();
   const extra = essences.filter((e) => !placed.has(e.id) && (!q || e.name.toLowerCase().includes(q)));
   if (extra.length) {
     html += `<h2>Not in stash layout</h2><div class="specials">`;
@@ -157,6 +172,28 @@ function renderGrid() {
     html += `</div>`;
   }
   $("#grid-view").innerHTML = html;
+}
+
+// Same stash layout, but each cell shows the profit of a 3:1 upgrade to the next tier.
+function renderUpgradeGrid() {
+  if (layoutPending("#upgrade-grid")) return;
+  const next = new Map(computeUpgrades(state.data.essences).filter((u) => u.count === 3).map((u) => [u.from.id, u]));
+  const maxAbs = Math.max(0, ...[...next.values()].map((u) => Math.abs(u.profit)));
+
+  const { html } = stashGridHtml((e) => {
+    const u = next.get(e.id);
+    if (!u) {
+      const why = e.tier ? "Max tier, can't upgrade" : "Special essences can't be upgraded";
+      return { body: `<div class="p muted">—</div><div class="c muted">&nbsp;</div>`, title: `${e.name}: ${why}` };
+    }
+    return {
+      body: `<div class="p">${profitHtml(u.profit)}</div><div class="c">${u.roi == null ? "" : change(u.roi)}</div>`,
+      heat: maxAbs ? (Math.abs(u.profit) / maxAbs) * 0.35 : 0,
+      heatColor: u.profit >= 0 ? "var(--up-rgb)" : "var(--down-rgb)",
+      title: `${u.step} ${u.kind}: costs ${price(u.cost)}, worth ${price(u.value)}`,
+    };
+  });
+  $("#upgrade-grid").innerHTML = html;
 }
 
 function renderList() {
@@ -246,7 +283,7 @@ function renderUpgrades() {
 function render() {
   for (const v of VIEWS) $(`#${v}-view`).hidden = state.view !== v;
   if (!state.data) return;
-  ({ grid: renderGrid, list: renderList, upgrade: renderUpgrades })[state.view]();
+  ({ grid: renderGrid, list: renderList, upgrade: () => { renderUpgradeGrid(); renderUpgrades(); } })[state.view]();
   const div = state.data.divinePrice ? ` · 1 div = ${state.data.divinePrice}c` : "";
   $("#status").textContent = `${state.data.essences.length} essences · updated ${ago(state.data.fetchedAt)}${div}`;
 }

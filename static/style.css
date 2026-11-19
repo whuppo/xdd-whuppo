@@ -8,6 +8,8 @@
   --up: #1f8a4c;
   --down: #c2412d;
   --heat: 168, 100, 30;
+  --up-rgb: 31, 138, 76;
+  --down-rgb: 194, 65, 45;
   color-scheme: light;
 }
 /* Dark palette: used when the OS prefers dark (unless forced light), or when forced dark. */
@@ -22,6 +24,8 @@
     --up: #4cc27f;
     --down: #ef6b55;
     --heat: 224, 163, 90;
+    --up-rgb: 76, 194, 127;
+    --down-rgb: 239, 107, 85;
     color-scheme: dark;
   }
 }
@@ -35,6 +39,8 @@
   --up: #4cc27f;
   --down: #ef6b55;
   --heat: 224, 163, 90;
+  --up-rgb: 76, 194, 127;
+  --down-rgb: 239, 107, 85;
   color-scheme: dark;
 }
 #theme { min-width: 84px; }
@@ -81,7 +87,7 @@ footer { padding: 16px 24px 32px; font-size: 12px; }
 .grid td {
   background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
   padding: 6px 8px; min-width: 88px; cursor: pointer; vertical-align: middle;
-  background-image: linear-gradient(rgba(var(--heat), var(--h, 0)), rgba(var(--heat), var(--h, 0)));
+  background-image: linear-gradient(rgba(var(--hc, var(--heat)), var(--h, 0)), rgba(var(--hc, var(--heat)), var(--h, 0)));
 }
 .grid td.empty { background: transparent; border-color: transparent; cursor: default; }
 .grid td.missing { background: transparent; border-style: dashed; cursor: default; }
