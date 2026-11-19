@@ -59,6 +59,20 @@
       The grid shows each essence's profit from upgrading it one tier; the table below also includes
       the two-step 9 Screaming → 1 Deafening.
     </p>
+    <section class="stash-box">
+      <h2>Your stash</h2>
+      <p class="muted intro">
+        Load a <a href="https://wealthyexile.com" target="_blank" rel="noopener">WealthyExile</a> CSV export to see
+        what upgrading the essences you actually own would make, at current poe.ninja prices.
+        The file is read in your browser and never uploaded.
+      </p>
+      <label class="drop" id="stash-drop">
+        <input type="file" id="stash-file" accept=".csv,text/csv">
+        <span>Choose a WealthyExile export (.csv) or drop it here</span>
+      </label>
+      <div id="stash-result"></div>
+    </section>
+    <h2 id="upgrade-grid-title">Upgrade profit per essence</h2>
     <div id="upgrade-grid"></div>
     <h2>All upgrades</h2>
     <label class="check"><input type="checkbox" id="profitable-only"> Profitable only</label>

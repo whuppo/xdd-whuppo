@@ -174,13 +174,21 @@ function renderGrid() {
   $("#grid-view").innerHTML = html;
 }
 
-// Same stash layout, but each cell shows the profit of a 3:1 upgrade to the next tier.
+// Upgrade grid. Two modes:
+//  - "unit":  each cell shows the profit of one 3:1 upgrade to the next tier.
+//  - "stash": each cell shows how many you own → how many after the best plan, and that step's total profit.
 function renderUpgradeGrid() {
+  const stashMode = !!state.stash && state.upgradeGridMode !== "unit";
+  $("#upgrade-grid-title").textContent = stashMode ? "Your stash: best upgrade plan" : "Upgrade profit per essence";
   if (layoutPending("#upgrade-grid")) return;
+  $("#upgrade-grid").innerHTML = (stashMode ? stashGrid() : unitGrid()).html;
+}
+
+function unitGrid() {
   const next = new Map(computeUpgrades(state.data.essences).filter((u) => u.count === 3).map((u) => [u.from.id, u]));
   const maxAbs = Math.max(0, ...[...next.values()].map((u) => Math.abs(u.profit)));
 
-  const { html } = stashGridHtml((e) => {
+  return stashGridHtml((e) => {
     const u = next.get(e.id);
     if (!u) {
       const why = e.tier ? "Max tier, can't upgrade" : "Special essences can't be upgraded";
@@ -193,7 +201,63 @@ function renderUpgradeGrid() {
       title: `${u.step} ${u.kind}: costs ${price(u.cost)}, worth ${price(u.value)}`,
     };
   });
-  $("#upgrade-grid").innerHTML = html;
+}
+
+function stashGrid() {
+  const quantities = state.stash.quantities;
+  const plans = new Map(planStash(quantities, state.data.essences).rows.map((r) => [r.kind, r]));
+
+  // Profit of the step that starts at this cell: Screaming cells carry step 1, Shrieking cells step 2.
+  const stepOf = (r, tier) =>
+    tier === "Screaming" ? { n: r.a, unit: r.p1, to: "Shrieking" }
+    : tier === "Shrieking" ? { n: r.b, unit: r.p2, to: "Deafening" }
+    : null;
+  // Flat decision colors, not a gradient: green = upgrade this, red = hold it.
+  const DECISION_SHADE = 0.25;
+
+  return stashGridHtml((e) => {
+    if (!e.tier) {
+      const qty = quantities[e.name] ?? 0;
+      return {
+        body: `<div class="p${qty ? "" : " muted"}">${qty}</div><div class="c muted">special</div>`,
+        title: `${e.name}: you own ${qty}. Special essences can't be upgraded.`,
+      };
+    }
+    const r = plans.get(e.kind);
+    const own = r ? r.own[e.tier] : 0, after = r ? r.after[e.tier] : 0;
+    const qtyHtml = own === after ? `${own}` : `${own} <span class="muted">→</span> ${after}`;
+    const step = r && stepOf(r, e.tier);
+    const lines = [`${e.name}: you own ${own}.`];
+    const idle = e.tier === "Deafening" ? "max tier" : own === 0 ? "—" : own < 3 ? "too few" : "keep";
+    let sub = `<span class="muted">${idle}</span>`;
+    let heat = 0, heatColor;
+
+    if (step && step.n) {
+      const profit = step.n * step.unit;
+      sub = profitHtml(profit);
+      heat = DECISION_SHADE;
+      heatColor = "var(--up-rgb)";
+      lines.push(`Vendor ${3 * step.n} → ${step.n} ${step.to} (${step.n} × ${profitHtml(step.unit).replace(/<[^>]+>/g, "")} = ${profitHtml(profit).replace(/<[^>]+>/g, "")}).`);
+      if (e.tier === "Screaming" && step.unit < 0 && r.b) {
+        lines.push(`Loses money on its own, but the extra Shrieking allow more Shrieking → Deafening upgrades, so the plan comes out ahead.`);
+      }
+    } else if (r && after > own) {
+      sub = `<span class="up">+${after - own} made</span>`;
+      lines.push(`Gains ${after - own} from upgrading the tier below.`);
+    } else if (step && own >= 3) {
+      heat = DECISION_SHADE;
+      heatColor = "var(--down-rgb)";
+      sub = `<span class="muted">hold</span>`;
+      lines.push(`Upgrading to ${step.to} isn't worth it at current prices.`);
+    }
+    if (after !== own) lines.push(`After the plan: ${after}.`);
+    if (r && e.tier === "Deafening" && r.profit) lines.push(`${e.kind} plan total: ${profitHtml(r.profit).replace(/<[^>]+>/g, "")}.`);
+
+    return {
+      body: `<div class="p${own || after ? "" : " muted"}">${qtyHtml}</div><div class="c">${sub}</div>`,
+      heat, heatColor, title: lines.join("\n"),
+    };
+  });
 }
 
 function renderList() {
@@ -280,10 +344,150 @@ function renderUpgrades() {
     </tr>`).join("") : `<tr><td colspan="7" class="muted">No upgrades match.</td></tr>`;
 }
 
+// ---------- stash import (WealthyExile CSV) ----------
+
+// Minimal RFC 4180 parser: quoted fields, "" escapes, CRLF, and a leading BOM.
+function parseCsv(text) {
+  text = text.replace(/^﻿/, "");
+  const rows = [];
+  let row = [], field = "", quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else field += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ",") { row.push(field); field = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(field); rows.push(row); row = []; field = "";
+    } else field += ch;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c.trim() !== ""));
+}
+
+function parseWealthyExport(text) {
+  const rows = parseCsv(text);
+  if (!rows.length) throw new Error("The file is empty.");
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const nameCol = header.indexOf("name"), qtyCol = header.indexOf("quantity");
+  if (nameCol < 0 || qtyCol < 0) throw new Error("Couldn't find Name and Quantity columns. Is this a WealthyExile export?");
+  const quantities = {};
+  for (const r of rows.slice(1)) {
+    const name = (r[nameCol] ?? "").trim();
+    const qty = Number(String(r[qtyCol] ?? "").replace(/,/g, ""));
+    if (!name || !Number.isFinite(qty) || qty <= 0) continue;
+    quantities[name] = (quantities[name] ?? 0) + qty; // same item can appear in several tabs
+  }
+  return quantities;
+}
+
+// Best plan for one essence type: a = Screaming→Shrieking recipes, b = Shrieking→Deafening recipes.
+// Profit is linear, but recipes made in step 1 feed step 2, so try every a and take the best.
+function bestPlan(own, p1, p2) {
+  let best = { a: 0, b: 0, profit: 0 };
+  const maxA = p1 == null ? 0 : Math.floor(own.Screaming / 3);
+  for (let a = 0; a <= maxA; a++) {
+    const b = p2 != null && p2 > 0 ? Math.floor((own.Shrieking + a) / 3) : 0;
+    const profit = a * (p1 ?? 0) + b * (p2 ?? 0);
+    if (profit > best.profit + 1e-9) best = { a, b, profit };
+  }
+  return best;
+}
+
+function planStash(quantities, essences) {
+  const byName = new Map(essences.map((e) => [e.name, e]));
+  const byKey = new Map(essences.filter((e) => e.tier).map((e) => [`${e.kind}|${e.tier}`, e]));
+  const kinds = new Set();
+  let matched = 0, ignored = 0;
+  for (const [name, qty] of Object.entries(quantities)) {
+    const e = byName.get(name);
+    if (e) { matched += qty; if (e.tier) kinds.add(e.kind); }
+    else if (/Essence of /.test(name)) ignored += qty; // lower tiers we don't track
+  }
+  const rows = [];
+  for (const kind of kinds) {
+    const [scr, shr, deaf] = TIERS.map((t) => byKey.get(`${kind}|${t}`));
+    const own = Object.fromEntries(TIERS.map((t) => [t, quantities[`${t} Essence of ${kind}`] ?? 0]));
+    const p1 = scr?.chaos != null && shr?.chaos != null ? shr.chaos - 3 * scr.chaos : null;
+    const p2 = shr?.chaos != null && deaf?.chaos != null ? deaf.chaos - 3 * shr.chaos : null;
+    const plan = bestPlan(own, p1, p2);
+    const after = {
+      Screaming: own.Screaming - 3 * plan.a,
+      Shrieking: own.Shrieking + plan.a - 3 * plan.b,
+      Deafening: own.Deafening + plan.b,
+    };
+    rows.push({ kind, image: (deaf ?? shr ?? scr)?.image, own, after, p1, p2, ...plan });
+  }
+  rows.sort((x, y) => y.profit - x.profit || x.kind.localeCompare(y.kind));
+  return { rows, matched, ignored, total: rows.reduce((s, r) => s + r.profit, 0) };
+}
+
+function renderStash() {
+  const box = $("#stash-result");
+  if (state.stashError) { box.innerHTML = `<p class="down">${esc(state.stashError)}</p>`; return; }
+  if (!state.stash) { box.innerHTML = ""; return; }
+  const { matched, ignored, total } = planStash(state.stash.quantities, state.data.essences);
+  const mode = state.upgradeGridMode === "unit" ? "unit" : "stash";
+  box.innerHTML = `
+    <div class="stash-summary">
+      <div><span>Loaded</span><b>${esc(state.stash.fileName)}</b></div>
+      <div><span>Essences matched</span><b>${matched}</b></div>
+      <div><span>Potential profit</span><b>${profitHtml(total)}</b></div>
+      <button type="button" id="stash-clear">Clear</button>
+    </div>
+    ${ignored ? `<p class="muted">${ignored} lower-tier essence${ignored === 1 ? "" : "s"} (Wailing and below) not counted.</p>` : ""}
+    <p class="muted">
+      In the grid below, each cell shows how many you own → how many you'd have after the plan, and the profit
+      from upgrading that tier. Hover a cell for details. Profit assumes you can sell at current poe.ninja prices;
+      selling many at once may move the price.
+    </p>
+    <div class="seg" role="group" aria-label="Grid shows">
+      <button type="button" data-gridmode="stash" class="${mode === "stash" ? "on" : ""}">My stash</button>
+      <button type="button" data-gridmode="unit" class="${mode === "unit" ? "on" : ""}">Per-essence profit</button>
+    </div>`;
+}
+
+async function loadStashFile(file) {
+  if (!file) return;
+  try {
+    const quantities = parseWealthyExport(await file.text());
+    state.stash = { fileName: file.name, quantities };
+    state.stashError = null;
+    save("stash", JSON.stringify(state.stash));
+  } catch (err) {
+    state.stashError = err.message;
+  }
+  render();
+}
+
+function initStash() {
+  try { state.stash = JSON.parse(load("stash", "null")); } catch { state.stash = null; }
+  state.upgradeGridMode = load("upgradeGridMode", "stash");
+  const input = $("#stash-file"), drop = $("#stash-drop");
+  input.addEventListener("change", () => { loadStashFile(input.files[0]); input.value = ""; });
+  drop.addEventListener("dragover", (ev) => { ev.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (ev) => {
+    ev.preventDefault(); drop.classList.remove("over");
+    loadStashFile(ev.dataTransfer.files[0]);
+  });
+  $("#stash-result").addEventListener("click", (ev) => {
+    const modeBtn = ev.target.closest("[data-gridmode]");
+    if (modeBtn) { state.upgradeGridMode = modeBtn.dataset.gridmode; save("upgradeGridMode", state.upgradeGridMode); render(); return; }
+    if (ev.target.id !== "stash-clear") return;
+    state.stash = null; state.stashError = null;
+    try { localStorage.removeItem("stash"); } catch { /* ignore */ }
+    render();
+  });
+}
+
 function render() {
   for (const v of VIEWS) $(`#${v}-view`).hidden = state.view !== v;
   if (!state.data) return;
-  ({ grid: renderGrid, list: renderList, upgrade: () => { renderUpgradeGrid(); renderUpgrades(); } })[state.view]();
+  ({ grid: renderGrid, list: renderList, upgrade: () => { renderStash(); renderUpgradeGrid(); renderUpgrades(); } })[state.view]();
   const div = state.data.divinePrice ? ` · 1 div = ${state.data.divinePrice}c` : "";
   $("#status").textContent = `${state.data.essences.length} essences · updated ${ago(state.data.fetchedAt)}${div}`;
 }
@@ -395,6 +599,7 @@ function initTheme() {
 
 async function init() {
   initTheme();
+  initStash();
   const leagues = await fetch("/api/leagues").then((r) => r.json()).catch(() => ["Standard"]);
   const saved = load("league", null);
   state.league = leagues.includes(saved) ? saved : leagues[0];
