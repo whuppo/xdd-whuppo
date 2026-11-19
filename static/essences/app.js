@@ -618,53 +618,33 @@ async function fetchData() {
   }
 }
 
-// ---------- theme ----------
-
-const THEMES = [
-  { id: "auto", label: "◐ Auto", title: "Theme: follows your system" },
-  { id: "light", label: "☀ Light", title: "Theme: light" },
-  { id: "dark", label: "☾ Dark", title: "Theme: dark" },
-];
-
-function applyTheme(id) {
-  const t = THEMES.find((x) => x.id === id) ?? THEMES[0];
-  if (t.id === "auto") delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = t.id;
-  const btn = $("#theme");
-  btn.textContent = t.label;
-  btn.title = `${t.title} (click to change)`;
-  return t.id;
-}
-
-function initTheme() {
-  let current = applyTheme(load("theme", "auto"));
-  $("#theme").addEventListener("click", () => {
-    const next = THEMES[(THEMES.findIndex((t) => t.id === current) + 1) % THEMES.length].id;
-    current = applyTheme(next);
-    save("theme", current);
-  });
-}
-
 async function init() {
-  initTheme();
   initStash();
   const leagues = await fetch("/api/leagues").then((r) => r.json()).catch(() => ["Standard"]);
   const saved = load("league", null);
   state.league = leagues.includes(saved) ? saved : leagues[0];
-  state.view = VIEWS.includes(load("view", "grid")) ? load("view", "grid") : "grid";
+  // A #grid / #list / #upgrade link (e.g. from the tools hub) wins over the remembered view.
+  const hashView = location.hash.slice(1);
+  state.view = VIEWS.includes(hashView) ? hashView : VIEWS.includes(load("view", "grid")) ? load("view", "grid") : "grid";
   state.currency = load("currency", "chaos");
 
   const sel = $("#league");
   sel.innerHTML = leagues.map((l) => `<option${l === state.league ? " selected" : ""}>${esc(l)}</option>`).join("");
   sel.addEventListener("change", () => { state.league = sel.value; save("league", sel.value); fetchData(); });
 
+  const setView = (view) => {
+    state.view = view; save("view", view);
+    history.replaceState(null, "", `#${view}`); // keep the URL shareable
+    document.querySelectorAll("[data-view]").forEach((x) => x.classList.toggle("on", x.dataset.view === view));
+    render();
+  };
   document.querySelectorAll("[data-view]").forEach((b) => {
     b.classList.toggle("on", b.dataset.view === state.view);
-    b.addEventListener("click", () => {
-      state.view = b.dataset.view; save("view", state.view);
-      document.querySelectorAll("[data-view]").forEach((x) => x.classList.toggle("on", x === b));
-      render();
-    });
+    b.addEventListener("click", () => setView(b.dataset.view));
+  });
+  window.addEventListener("hashchange", () => {
+    const v = location.hash.slice(1);
+    if (VIEWS.includes(v) && v !== state.view) setView(v);
   });
   document.querySelectorAll("[data-cur]").forEach((b) => {
     b.classList.toggle("on", b.dataset.cur === state.currency);

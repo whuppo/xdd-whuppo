@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Essence Prices</title>
+<title>xdd.whuppo</title>
 <link rel="stylesheet" href="style.css">
 <script>
   // Apply the saved theme before first paint so there's no flash of the wrong colors.
@@ -13,95 +13,42 @@
   } catch {}
 </script>
 </head>
-<body>
+<body class="hub">
 <header>
   <div class="brand">
-    <h1>Essence Prices</h1>
-    <span id="status" class="muted"></span>
+    <div>
+      <h1>xdd.whuppo</h1>
+      <p class="muted tagline">vibe coded bullshit from United Warriors United</p>
+    </div>
     <div class="seg" role="group" aria-label="Theme">
       <button id="theme" title="Theme: follows your system">◐ Auto</button>
     </div>
   </div>
-  <div class="controls">
-    <select id="league" aria-label="League"></select>
-    <div class="seg" role="group" aria-label="View">
-      <button data-view="grid" class="on">Grid</button>
-      <button data-view="list">List</button>
-      <button data-view="upgrade">Upgrade</button>
-    </div>
-    <div class="seg" role="group" aria-label="Currency">
-      <button data-cur="chaos" class="on">Chaos</button>
-      <button data-cur="divine">Divine</button>
-    </div>
-    <input id="search" type="search" placeholder="Filter…" aria-label="Filter essences">
-  </div>
 </header>
 
 <main>
-  <section id="grid-view"></section>
-  <section id="list-view" hidden>
-    <table id="list">
-      <thead>
-        <tr>
-          <th data-sort="name">Essence</th>
-          <th data-sort="chaos" class="num">Price</th>
-          <th data-sort="change" class="num">7d</th>
-          <th class="spark-col">Trend</th>
-          <th data-sort="volume" class="num">Volume</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </section>
-  <section id="upgrade-view" hidden>
-    <p class="muted intro">
-      Vendor 3 of an essence to get 1 of the next tier. Profit = next-tier price − 3 × this tier's price.
-      The grid shows each essence's profit from upgrading it one tier; the table below also includes
-      the two-step 9 Screaming → 1 Deafening.
-    </p>
-    <section class="stash-box">
-      <h2>Your stash</h2>
-      <p class="muted intro">
-        Load a <a href="https://wealthyexile.com" target="_blank" rel="noopener">WealthyExile</a> CSV export to see
-        what upgrading the essences you actually own would make, at current poe.ninja prices.
-        The file is read in your browser and never uploaded.
-      </p>
-      <label class="drop" id="stash-drop">
-        <input type="file" id="stash-file" accept=".csv,text/csv">
-        <span>Choose a WealthyExile export (.csv) or drop it here</span>
-      </label>
-      <div id="stash-result"></div>
-    </section>
-    <h2 id="upgrade-grid-title">Upgrade profit per essence</h2>
-    <div id="upgrade-grid"></div>
-    <h2>All upgrades</h2>
-    <label class="check"><input type="checkbox" id="profitable-only"> Profitable only</label>
-    <table id="upgrades">
-      <thead>
-        <tr>
-          <th data-usort="kind">Essence</th>
-          <th data-usort="step">Upgrade</th>
-          <th data-usort="cost" class="num">Cost</th>
-          <th data-usort="value" class="num">Result</th>
-          <th data-usort="profit" class="num">Profit</th>
-          <th data-usort="roi" class="num">ROI</th>
-          <th data-usort="volume" class="num">Result volume</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </section>
+  <h2 class="section-title">Tools</h2>
+  <div class="tools">
+    <article class="tool-card">
+      <img src="https://web.poecdn.com/gen/image/WzI1LDE0LHsiZiI6IjJESXRlbXMvQ3VycmVuY3kvRXNzZW5jZS9TY29ybjciLCJzY2FsZSI6MX1d/ac4ec5f480/Scorn7.png" alt="">
+      <div>
+        <h3><a href="essences/">Essence Prices</a></h3>
+        <p class="muted">Live essence prices laid out like the stash tab, plus a 3:1 upgrade planner for your own stash.</p>
+        <div class="chips">
+          <a href="essences/#grid">Price grid</a>
+          <a href="essences/#list">Price list</a>
+          <a href="essences/#upgrade">Upgrade planner</a>
+        </div>
+      </div>
+    </article>
+  </div>
 </main>
 
-<dialog id="detail">
-  <form method="dialog"><button class="close" aria-label="Close">×</button></form>
-  <div id="detail-body"></div>
-</dialog>
-
 <footer class="muted">
-  Data from <a href="https://poe.ninja" target="_blank" rel="noopener">poe.ninja</a> (Currency Exchange). Refreshed every 30 min.
+  Prices from <a href="https://poe.ninja" target="_blank" rel="noopener">poe.ninja</a>.
+  Not affiliated with Grinding Gear Games.
 </footer>
 
-<script src="app.js"></script>
+<script src="theme.js"></script>
 </body>
 </html>
