@@ -1,0 +1,57 @@
+# Deploys the data updater (update_data.py + lambda_handler.py) to the Lambda in infra/updater.yml,
+# then runs it once as a smoke test. The Lambda itself runs every 30 minutes on an EventBridge schedule.
+#
+# Needs repository variables (Settings → Secrets and variables → Actions → Variables), from the stack's outputs:
+#   AWS_REGION, AWS_DEPLOY_ROLE_ARN, AWS_UPDATER_FUNCTION
+# Skipped when they aren't set (e.g. on forks).
+name: Deploy data updater
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - update_data.py
+      - lambda_handler.py
+      - .github/workflows/deploy-updater.yml
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC → AWS role, no stored keys
+  contents: read
+
+concurrency:
+  group: deploy-updater
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    env:
+      FUNCTION: ${{ vars.AWS_UPDATER_FUNCTION }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the code compiles
+        run: python3 -m py_compile update_data.py lambda_handler.py
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Deploy code
+        run: |
+          zip -j updater.zip update_data.py lambda_handler.py
+          aws lambda update-function-code --function-name "$FUNCTION" --zip-file fileb://updater.zip >/dev/null
+          aws lambda wait function-updated --function-name "$FUNCTION"
+
+      - name: Run it once
+        run: |
+          err=$(aws lambda invoke --function-name "$FUNCTION" --cli-read-timeout 330 \
+                  --query FunctionError --output text out.json)
+          cat out.json; echo
+          if [ "$err" != "None" ]; then
+            echo "::error::The updater failed ($err). Logs: CloudWatch → /aws/lambda/$FUNCTION"
+            exit 1
+          fi

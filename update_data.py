@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Fetch essence prices from poe.ninja and write the static JSON files the site reads.
+"""Fetch the data the site's tools need and write it as static JSON.
 
-Used by the GitHub Action (every 30 min) and by server.py for local runs.
+Run every 30 minutes by the updater Lambda (lambda_handler.py, which syncs the output to S3)
+and by server.py for local runs. Each tool that needs fetched data has a fetcher in FETCHERS.
 
 Output layout (under --out, default ./data):
-  leagues.json                      [{"name": "Covens", "slug": "covens"}, ...]
-  essences/<league-slug>.json       current prices: {league, fetchedAt, divinePrice, essences: [...]}
-  history/<league-slug>/<id>.json   [[unix_ts, chaos, volume], ...], oldest first
+  essences tool (at the root for historical reasons; new tools use <tool>/...):
+    leagues.json                      [{"name": "Covens", "slug": "covens"}, ...]
+    essences/<league-slug>.json       current prices: {league, fetchedAt, divinePrice, essences: [...]}
+    history/<league-slug>/<id>.json   [[unix_ts, chaos, volume], ...], oldest first
 
-No third-party dependencies.
+No third-party dependencies. Keep it that way if you can: the Lambda deploy zips these files as-is.
 """
 
 import argparse
@@ -134,8 +136,8 @@ def prune(out, keep_slugs):
                 shutil.rmtree(target) if os.path.isdir(target) else os.remove(target)
 
 
-def update_all(out, log=print):
-    """Refresh every current league. Returns the number of leagues that failed."""
+def update_essences(out, log=print):
+    """Refresh essence prices for every current league. Returns the number of leagues that failed."""
     leagues = fetch_leagues()
     failed = 0
     ok = []
@@ -157,11 +159,46 @@ def update_all(out, log=print):
     return failed if ok else len(leagues) or 1
 
 
+# ---------- registry ----------
+
+# Every tool that needs regularly fetched data registers a fetcher here: name -> fn(out, log).
+# A fetcher must:
+#   - write only under its own paths in `out` (new tools: `out/<tool>/...`), and prune only those;
+#   - keep the last good data when a fetch fails, rather than deleting or blanking it;
+#   - return how many of its updates failed (0 = all good). Raising counts as one failure.
+# It runs every 30 minutes; if a tool needs data less often, skip work while its files are fresh.
+FETCHERS = {
+    "essences": update_essences,
+}
+
+
+def update_all(out, tools=None, log=print):
+    """Run every fetcher (or only those named in `tools`). Returns the total number of failures.
+
+    One tool failing never stops the others.
+    """
+    unknown = set(tools or ()) - FETCHERS.keys()
+    if unknown:
+        log(f"unknown tool(s): {', '.join(sorted(unknown))}")
+    failed = len(unknown)
+    for name, fetch in FETCHERS.items():
+        if tools is not None and name not in tools:
+            continue
+        try:
+            failed += fetch(out, log=lambda msg, name=name: log(f"{name}: {msg}"))
+        except Exception as exc:
+            failed += 1
+            log(f"{name}: FAILED ({exc})")
+    return failed
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "data"))
+    parser.add_argument("--tool", action="append", choices=sorted(FETCHERS),
+                        help="only run this tool's fetcher (repeatable; default: all)")
     args = parser.parse_args()
-    failed = update_all(args.out)
+    failed = update_all(args.out, tools=args.tool)
     sys.exit(1 if failed else 0)
 
 
