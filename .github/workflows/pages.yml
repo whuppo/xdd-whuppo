@@ -1,24 +1,22 @@
-# Refreshes essence prices from poe.ninja every 30 minutes and deploys the site to GitHub Pages.
+# Deploys static/ to GitHub Pages on every push to main.
 #
-# Price data (current prices + history) lives on the `data` branch, which is rewritten as a
-# single commit on every run, so it never grows main's history or the repo size.
+# Data isn't built here: the updater Lambda (infra/updater.yml) writes it to S3 every 30 minutes and
+# pages load it from CloudFront. This job only bakes that URL into static/config.js.
 #
+# Needs the DATA_URL repository variable (the stack's DataUrl output).
 # One-time setup: Settings → Pages → Build and deployment → Source: "GitHub Actions".
-name: Update prices and deploy
+name: Deploy site
 
 on:
-  schedule:
-    - cron: "0,30 * * * *" # every 30 min, on the hour and half hour (UTC); GitHub may start these a few minutes late
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write # push the data branch
+  contents: read
   pages: write
   id-token: write
 
-# Never run two updates at once (they'd race on the data branch); queue instead of cancelling.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -29,38 +27,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Restore existing data
+      - name: Point the site at the production data
+        env:
+          DATA_URL: ${{ vars.DATA_URL }}
         run: |
-          if git ls-remote --exit-code --heads origin data >/dev/null; then
-            git fetch --depth 1 origin data
-            git worktree add data-branch FETCH_HEAD
-          else
-            mkdir data-branch
+          if [ -z "$DATA_URL" ]; then
+            echo "::error::Set the DATA_URL repository variable to the stack's DataUrl output"
+            exit 1
           fi
-
-      - name: Fetch prices from poe.ninja
-        run: python3 update_data.py --out data-branch
-
-      - name: Save data branch
-        working-directory: data-branch
-        run: |
-          [ -d .git ] || [ -f .git ] || git init -q
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -q --orphan data-snapshot
-          git add -A
-          git commit -q -m "Price data $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/data
-
-      - name: Assemble site
-        run: |
-          mkdir -p _site/data
-          cp -r static/. _site/
-          rsync -a --exclude .git data-branch/ _site/data/
+          sed -i "s#__DATA_URL__#${DATA_URL%/}#" static/config.js
+          ! grep -q __DATA_URL__ static/config.js
 
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: _site
+          path: static
 
   deploy:
     needs: build

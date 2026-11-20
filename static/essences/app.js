@@ -607,9 +607,9 @@ async function openDetail(id) {
 
 // ---------- data ----------
 
-// Static JSON written by update_data.py (GitHub Action on Pages, server.py locally).
-// Relative, so the site works at a domain root or under /<repo>/ on github.io.
-const DATA = "../data";
+// Static JSON written by update_data.py (the updater Lambda in production, server.py locally).
+// The base URL comes from ../config.js.
+const DATA = window.XDD_DATA;
 
 function leagueSlug() {
   return state.leagues.find((l) => l.name === state.league)?.slug ?? "";

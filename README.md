@@ -20,20 +20,47 @@ Tracks essence prices from [poe.ninja](https://poe.ninja).
 ## Layout
 
 ```
-update_data.py         fetches poe.ninja, writes static JSON (current prices + 90 days of history)
-server.py              local dev server: runs update_data.py every 30 min, serves static/ and /data/
-.github/workflows/     GitHub Action: refresh data every 30 min and deploy to GitHub Pages
+update_data.py         fetchers for every tool's data (FETCHERS registry); writes static JSON
+lambda_handler.py      AWS Lambda entry point: syncs data/ from S3, runs the fetchers, syncs back
+server.py              local dev server: runs the fetchers every 30 min, serves static/ and /data/
+infra/updater.yml      CloudFormation: S3 + CloudFront for data, the Lambda, its 30-min schedule,
+                       the GitHub OIDC deploy role, optional failure alerts
+.github/workflows/
+  pages.yml            deploy static/ to GitHub Pages on push to main
+  deploy-updater.yml   deploy the Lambda's code on push to main (when the updater changes)
 static/
   index.html           tools hub
   style.css            shared styles (colors, header, cards, grids)
   theme.js             shared light/dark/auto toggle
+  config.js            where tools load data from (CloudFront in production, /data locally)
   essences/            Essence Prices tool (index.html, app.js, essence_tab.txt)
 test-data/             sample WealthyExile exports
 ```
 
-The site is fully static: pages read JSON from `data/` with relative paths, so it works at a domain root or under `/<repo>/` on github.io.
+How it fits together: the site (`static/`) is plain files on GitHub Pages. The data is generated
+separately: every 30 minutes EventBridge Scheduler runs a Lambda that executes `update_data.py`
+and writes the JSON to S3, which CloudFront serves to the pages. Locally, `server.py` runs the same
+`update_data.py` and serves everything from one place.
 
-To add a tool: create `static/<tool>/index.html` (link `../style.css` and `../theme.js`, add an `← All tools` link to `../`, and include `<meta name="robots" content="noindex, nofollow">` so it stays out of search results) and add a card for it in `static/index.html`.
+## Adding a tool
+
+1. **The page.** Create `static/<tool>/index.html`: link `../style.css` and `../theme.js`, add an
+   `← All tools` link to `../`, and include `<meta name="robots" content="noindex, nofollow">` so it
+   stays out of search results. Add a card for it in `static/index.html`.
+2. **Its data, if it needs any fetched on a schedule.**
+   - Write a fetcher in `update_data.py` and add it to `FETCHERS`. It writes only under
+     `out/<tool>/`, keeps its last good data when a fetch fails, and returns its failure count
+     (the comment above `FETCHERS` has the full contract).
+   - In the page, include `../config.js` before your script and fetch from
+     `${window.XDD_DATA}/<tool>/...`.
+   - Stick to the Python standard library. The Lambda deploy zips `update_data.py` as-is, so
+     third-party packages would need changes to `deploy-updater.yml`.
+   - Fetchers run every 30 minutes. For data that changes less often, have the fetcher skip work
+     while its files are still fresh.
+
+No AWS changes are needed for either step: the Lambda can write anywhere under `data/`, CloudFront
+serves all of it with CORS, and merging to `main` redeploys both the site and the Lambda.
+`python3 update_data.py --tool <tool>` runs one fetcher on its own.
 
 ## Run locally
 
@@ -42,21 +69,47 @@ python3 server.py
 # open http://localhost:8000   (set PORT=... to change the port)
 ```
 
-Needs only Python 3. It fetches prices on startup and every 30 minutes into `data/` (git-ignored), and serves the site exactly as GitHub Pages does.
+Needs only Python 3. It fetches data on startup and every 30 minutes into `data/` (git-ignored),
+and `config.js` points pages at it when the host is `localhost`.
 
-## Deploy (GitHub Pages)
+## Deploy
 
-`.github/workflows/pages.yml` runs every 30 minutes (at :00 and :30), on every push to `main`, and on demand (Actions → "Update prices and deploy" → Run workflow). Each run:
+### Site (GitHub Pages)
 
-1. restores the previous data from the `data` branch,
-2. runs `update_data.py` to add the latest prices,
-3. force-pushes the result back to `data` as a single commit (so data never piles up in `main`'s history),
-4. deploys `static/` + the data to GitHub Pages.
+`.github/workflows/pages.yml` deploys `static/` on every push to `main` (or on demand), replacing
+the `__DATA_URL__` placeholder in `config.js` with the `DATA_URL` repository variable.
 
-One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**. For a custom domain, add it under Settings → Pages and point DNS at GitHub (a `CNAME` to `<user>.github.io` for a subdomain).
+One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**. For a custom
+domain, add it under Settings → Pages and point DNS at GitHub (a `CNAME` to `<user>.github.io` for a
+subdomain).
 
-GitHub may delay scheduled runs by several minutes, or skip them under heavy load. Fine for data that only changes every 30 minutes.
+### Data updater (AWS)
+
+`.github/workflows/deploy-updater.yml` deploys `update_data.py` + `lambda_handler.py` to the Lambda
+whenever they change on `main`, then runs it once and fails if the run fails. Logs are in CloudWatch
+under `/aws/lambda/<stack>-updater`. To refresh data right away, run that workflow or invoke the
+function from the console.
+
+One-time setup:
+
+1. **Create the stack** from `infra/updater.yml` (CloudFormation console → Create stack → upload
+   the file, or the CLI below). Set `CreateGitHubOidcProvider=false` if the account already has the
+   `token.actions.githubusercontent.com` identity provider, and `AlertEmail` if you want an email
+   when updates fail twice in a row or stop running.
+   ```sh
+   aws cloudformation deploy --stack-name xdd-whuppo --template-file infra/updater.yml      --capabilities CAPABILITY_IAM --parameter-overrides AlertEmail=you@example.com
+   aws cloudformation describe-stacks --stack-name xdd-whuppo --query "Stacks[0].Outputs"
+   ```
+2. **Set repository variables** (Settings → Secrets and variables → Actions → Variables) from the
+   outputs: `AWS_REGION` (the stack's region), `AWS_DEPLOY_ROLE_ARN`, `AWS_UPDATER_FUNCTION`,
+   `DATA_URL`. None of them are secret.
+3. **Carry over the existing history** from the old `data` branch (once):
+   `infra/seed-from-data-branch.sh <DataBucketName>`.
+4. **Deploy the Lambda code**: run the "Deploy data updater" workflow (Actions → Run workflow). The
+   stack starts with a placeholder function, so scheduled runs fail until this has run once.
+
+Cost is effectively zero: a few cents a month at most for Lambda, S3 and CloudFront at this size.
 
 ## Data source
 
-`https://poe.ninja/poe1/api/economy/exchange/current/overview?league=<League>&type=Essence`. poe.ninja doesn't send CORS headers, so the browser can't call it directly; that's why prices are fetched by the Action (or the local server) and saved as static files. This API is undocumented and has changed before. If prices stop updating, check the Action's logs and this endpoint first.
+`https://poe.ninja/poe1/api/economy/exchange/current/overview?league=<League>&type=Essence`. poe.ninja doesn't send CORS headers, so the browser can't call it directly; that's why prices are fetched by the updater (or the local server) and saved as static files. This API is undocumented and has changed before. If prices stop updating, check the Lambda's CloudWatch logs and this endpoint first.

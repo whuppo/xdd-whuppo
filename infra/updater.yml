@@ -1,0 +1,312 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  xdd.whuppo data updater. EventBridge Scheduler runs a Lambda (lambda_handler.py + update_data.py)
+  every 30 minutes; it writes JSON to a private S3 bucket that CloudFront serves to the site.
+  GitHub Actions deploys the Lambda's code through an OIDC role (no stored AWS keys).
+
+  The template deploys a placeholder function. Its real code arrives when
+  .github/workflows/deploy-updater.yml runs, so run that workflow once right after creating the stack.
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: whuppo/xdd-whuppo
+    Description: owner/name of the repository allowed to deploy the Lambda (from its main branch only).
+  CreateGitHubOidcProvider:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+    Description: >-
+      An AWS account can hold only one GitHub OIDC provider. Set "false" if
+      token.actions.githubusercontent.com already exists under IAM > Identity providers.
+  ScheduleExpression:
+    Type: String
+    Default: rate(30 minutes)
+    Description: How often to refresh data. poe.ninja itself caches for 30 minutes.
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: >-
+      Optional. Email to notify when updates fail twice in a row or stop running. You must confirm
+      the subscription email SNS sends.
+
+Conditions:
+  CreateOidc: !Equals [!Ref CreateGitHubOidcProvider, "true"]
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
+
+Resources:
+  # ---------- data: private bucket, served only through CloudFront ----------
+
+  DataBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain # holds the price history; delete by hand if you really mean it
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+
+  DataOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-data"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  DataDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub "${AWS::StackName} data"
+        Enabled: true
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: data-bucket
+            DomainName: !GetAtt DataBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt DataOriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: data-bucket
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # Managed-CachingOptimized: honors the objects' Cache-Control (max-age=60, set by the Lambda).
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          # Managed-SimpleCORS: Access-Control-Allow-Origin: *, so Pages (and localhost) can fetch it.
+          ResponseHeadersPolicyId: 60669652-455b-4ae9-85a4-c4c02393f86c
+
+  DataBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DataBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CloudFrontReadData
+            Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub "${DataBucket.Arn}/data/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${DataDistribution}"
+          - Sid: CloudFrontListSoMissingFilesAre404 # without this S3 answers 403 for missing keys
+            Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:ListBucket
+            Resource: !GetAtt DataBucket.Arn
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${DataDistribution}"
+
+  # ---------- updater Lambda ----------
+
+  UpdaterLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-updater"
+      RetentionInDays: 30
+
+  UpdaterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub "${UpdaterLogGroup.Arn}"
+        - PolicyName: data
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # The whole data/ prefix, so new tools' folders need no policy change.
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub "${DataBucket.Arn}/data/*"
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt DataBucket.Arn
+                Condition:
+                  StringLike:
+                    s3:prefix: ["data/*"]
+
+  UpdaterFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-updater"
+      Description: Fetches tool data (update_data.py) and syncs it to S3. Code deployed by GitHub Actions.
+      Runtime: python3.13
+      Architectures: [arm64]
+      Handler: lambda_handler.handler
+      MemorySize: 256
+      Timeout: 300 # well under the 30-minute schedule, so runs never overlap
+      Role: !GetAtt UpdaterRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref UpdaterLogGroup
+      Environment:
+        Variables:
+          DATA_BUCKET: !Ref DataBucket
+          DATA_PREFIX: data/
+      Code:
+        # Placeholder; deploy-updater.yml replaces it. CloudFormation leaves deployed code alone on
+        # later stack updates because this inline code doesn't change.
+        ZipFile: |
+          def handler(event, context):
+              raise RuntimeError("Placeholder: run the deploy-updater GitHub workflow to deploy the real code")
+
+  UpdaterAsyncConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref UpdaterFunction
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 0 # the next scheduled run is the retry
+
+  SchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: scheduler.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: invoke-updater
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt UpdaterFunction.Arn
+
+  UpdaterSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Description: Refresh xdd.whuppo data
+      ScheduleExpression: !Ref ScheduleExpression
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      State: ENABLED
+      Target:
+        Arn: !GetAtt UpdaterFunction.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        Input: "{}"
+        RetryPolicy:
+          MaximumRetryAttempts: 0
+
+  # ---------- GitHub Actions deploy access (OIDC) ----------
+
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateOidc
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Assumed by GitHub Actions on the main branch to deploy the updater Lambda.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubRepo}:ref:refs/heads/main"
+      Policies:
+        - PolicyName: deploy-updater
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:UpdateFunctionCode
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:InvokeFunction # smoke-test run after each deploy
+                Resource: !GetAtt UpdaterFunction.Arn
+
+  # ---------- optional alerts ----------
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlertEmail
+    Properties:
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+
+  UpdaterFailingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
+    Properties:
+      AlarmDescription: The data updater failed on two consecutive runs (poe.ninja down or its API changed?).
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref UpdaterFunction }]
+      Statistic: Sum
+      Period: 1800
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+  UpdaterNotRunningAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
+    Properties:
+      AlarmDescription: The data updater hasn't run for 2 hours (schedule disabled or broken?).
+      Namespace: AWS/Lambda
+      MetricName: Invocations
+      Dimensions: [{ Name: FunctionName, Value: !Ref UpdaterFunction }]
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref AlertTopic]
+      OKActions: [!Ref AlertTopic]
+
+Outputs:
+  DataUrl:
+    Description: Set as the DATA_URL repository variable.
+    Value: !Sub "https://${DataDistribution.DomainName}/data"
+  DeployRoleArn:
+    Description: Set as the AWS_DEPLOY_ROLE_ARN repository variable.
+    Value: !GetAtt GitHubDeployRole.Arn
+  UpdaterFunctionName:
+    Description: Set as the AWS_UPDATER_FUNCTION repository variable.
+    Value: !Ref UpdaterFunction
+  DataBucketName:
+    Description: Bucket holding the data (under data/). Used once to seed history from the old data branch.
+    Value: !Ref DataBucket
