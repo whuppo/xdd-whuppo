@@ -8,10 +8,14 @@ Description: >-
   .github/workflows/deploy-updater.yml runs, so run that workflow once right after creating the stack.
 
 Parameters:
-  GitHubRepo:
+  GitHubSubjectPrefix:
     Type: String
-    Default: whuppo/xdd-whuppo
-    Description: owner/name of the repository allowed to deploy the Lambda (from its main branch only).
+    Default: repo:whuppo@8893526/xdd-whuppo@1464674316
+    Description: >-
+      The repository allowed to deploy the Lambda (from its main branch only), as the prefix of the
+      "sub" claim in its GitHub OIDC tokens. This repo uses GitHub's immutable format, which includes
+      the owner and repo IDs so a renamed or re-created repo can't match. Get it with:
+      gh api repos/<owner>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix
   CreateGitHubOidcProvider:
     Type: String
     AllowedValues: ["true", "false"]
@@ -50,6 +54,16 @@ Resources:
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
+      # S3 itself adds Access-Control-Allow-Origin: * so Pages (and localhost) can fetch the data;
+      # CloudFront caches it per Origin (DataCachePolicy). CloudFront's own CORS response-headers
+      # policies (e.g. Managed-SimpleCORS) proved unreliable here: they leave the header off for
+      # requests with Cache-Control/Pragma (what fetch(..., { cache: "no-cache" }) sends) and on
+      # some revalidated cache hits. The data is public and read-only, so * is fine.
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ["*"]
+            AllowedMethods: [GET, HEAD]
+            MaxAge: 3600
 
   DataOriginAccessControl:
     Type: AWS::CloudFront::OriginAccessControl
@@ -80,10 +94,29 @@ Resources:
           AllowedMethods: [GET, HEAD, OPTIONS]
           CachedMethods: [GET, HEAD]
           Compress: true
-          # Managed-CachingOptimized: honors the objects' Cache-Control (max-age=60, set by the Lambda).
-          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
-          # Managed-SimpleCORS: Access-Control-Allow-Origin: *, so Pages (and localhost) can fetch it.
-          ResponseHeadersPolicyId: 60669652-455b-4ae9-85a4-c4c02393f86c
+          CachePolicyId: !Ref DataCachePolicy
+
+  DataCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub "${AWS::StackName}-data"
+        Comment: Honors the objects' Cache-Control (max-age=60, set by the Lambda); keys on Origin for CORS.
+        MinTTL: 0
+        DefaultTTL: 60
+        MaxTTL: 86400
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+          # Forward Origin so S3 answers with its CORS header, and cache per Origin so a response
+          # without the header (no Origin sent) is never served to a cross-origin fetch.
+          HeadersConfig:
+            HeaderBehavior: whitelist
+            Headers: [Origin]
+          CookiesConfig:
+            CookieBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
 
   DataBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -239,7 +272,7 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubRepo}:ref:refs/heads/main"
+                token.actions.githubusercontent.com:sub: !Sub "${GitHubSubjectPrefix}:ref:refs/heads/main"
       Policies:
         - PolicyName: deploy-updater
           PolicyDocument:
