@@ -7,7 +7,8 @@ and by server.py for local runs. Each tool that needs fetched data has a fetcher
 Output layout (under --out, default ./data):
   essences tool (at the root for historical reasons; new tools use <tool>/...):
     leagues.json                      [{"name": "Covens", "slug": "covens"}, ...]
-    essences/<league-slug>.json       current prices: {league, fetchedAt, divinePrice, essences: [...]}
+    essences/<league-slug>.json       current prices: {league, fetchedAt, divinePrice, primalLifeforce,
+                                      essences: [...]}; primalLifeforce is chaos per unit, or null
     history/<league-slug>/<id>.json   [[unix_ts, chaos, volume], ...], oldest first
 
 No third-party dependencies. Keep it that way if you can: the Lambda deploy zips these files as-is.
@@ -59,9 +60,21 @@ def fetch_leagues():
     return [l["name"] for l in data.get("economyLeagues", []) if not l.get("isPrivate")]
 
 
+def fetch_overview(league, item_type):
+    qs = urllib.parse.urlencode({"league": league, "type": item_type})
+    return fetch_json(f"{NINJA}/economy/exchange/current/overview?{qs}")
+
+
+def fetch_primal_lifeforce(league):
+    """Chaos price of one Primal Crystallised Lifeforce, or None if it isn't trading in this league."""
+    for line in fetch_overview(league, "Currency").get("lines", []):
+        if line["id"] == "primal-lifeforce":
+            return line.get("primaryValue")
+    return None
+
+
 def fetch_essences(league):
-    qs = urllib.parse.urlencode({"league": league, "type": "Essence"})
-    raw = fetch_json(f"{NINJA}/economy/exchange/current/overview?{qs}")
+    raw = fetch_overview(league, "Essence")
     items = {i["id"]: i for i in raw.get("items", [])}
     divine_per_chaos = raw.get("core", {}).get("rates", {}).get("divine")
     out = []
@@ -145,7 +158,14 @@ def update_essences(out, log=print):
         slug = slugify(name)
         try:
             result = fetch_essences(name)
-            write_json(os.path.join(out, "essences", f"{slug}.json"), result)
+            path = os.path.join(out, "essences", f"{slug}.json")
+            try:
+                result["primalLifeforce"] = fetch_primal_lifeforce(name)
+            except Exception as exc:  # essence prices are still good; reuse the last lifeforce price
+                failed += 1
+                result["primalLifeforce"] = read_json(path, {}).get("primalLifeforce")
+                log(f"{name}: lifeforce price FAILED ({exc})")
+            write_json(path, result)
             added = append_history(out, slug, result)
             ok.append({"name": name, "slug": slug})
             log(f"{name}: {len(result['essences'])} essences, {added} history points")

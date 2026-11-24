@@ -11,9 +11,10 @@ Tracks essence prices from [poe.ninja](https://poe.ninja).
 - **Grid view:** laid out like the in-game essence stash tab, shaded by relative value within each tier, with 7-day change. The layout comes from `static/essences/essence_tab.txt` (tab-separated; the first line is each column's tier, cells are essence types or `(special) Name`, blanks are intentional). Edit that file to change the grid.
 - **List view:** sortable by price, 7-day change or volume, with sparklines.
 - **Upgrade view:** profit from the 3:1 vendor recipe (3 Screaming → 1 Shrieking, 3 Shrieking → 1 Deafening) and the 9:1 two-step, as a stash-layout grid and a table sortable by profit or ROI.
+- **Gamble view:** expected profit of spending 30 Primal Crystallised Lifeforce to turn an essence into a random different one of the same tier (Hysteria, Insanity, Horror and Delirium only turn into each other; Desolation and Trickery can't be gambled), with the break-even price for each pool and each essence's chance of coming out ahead. We don't have the real odds, so it assumes every outcome is equally likely (the page says so) and that you can sell at poe.ninja prices. Lifeforce is priced from poe.ninja too.
 - **Your stash:** load a [WealthyExile](https://wealthyexile.com) CSV export (needs `Name` and `Quantity` columns) to get the most profitable upgrade plan for the essences you own. The upgrade grid then shows, per cell, how many you own → how many after the plan and that step's profit (toggle back to per-essence profit any time), with the total above. The file is parsed in the browser and kept only in that browser's localStorage. `test-data/wealthyexile-triple-digit.csv` is a fake export with large stacks for testing.
-- **Detail view:** click any essence to see its upgrade profit, poe.ninja's 7-day trend and the history this tracker has recorded.
-- Views can be linked directly: `/essences/#grid`, `#list`, `#upgrade`.
+- **Detail view:** click any essence to see its upgrade profit, gamble EV, poe.ninja's 7-day trend and the history this tracker has recorded.
+- Views can be linked directly: `/essences/#grid`, `#list`, `#upgrade`, `#gamble`.
 - Lower tiers (Whispering through Wailing) aren't tracked, since they barely show up in the game.
 - Prices in chaos or divine, league selector, and a text filter.
 
@@ -112,4 +113,4 @@ Cost is effectively zero: a few cents a month at most for Lambda, S3 and CloudFr
 
 ## Data source
 
-`https://poe.ninja/poe1/api/economy/exchange/current/overview?league=<League>&type=Essence`. poe.ninja doesn't send CORS headers, so the browser can't call it directly; that's why prices are fetched by the updater (or the local server) and saved as static files. This API is undocumented and has changed before. If prices stop updating, check the Lambda's CloudWatch logs and this endpoint first.
+`https://poe.ninja/poe1/api/economy/exchange/current/overview?league=<League>&type=Essence` (and `type=Currency` for the lifeforce price). poe.ninja doesn't send CORS headers, so the browser can't call it directly; that's why prices are fetched by the updater (or the local server) and saved as static files. This API is undocumented and has changed before. If prices stop updating, check the Lambda's CloudWatch logs and this endpoint first.

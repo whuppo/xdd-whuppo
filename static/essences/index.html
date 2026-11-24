@@ -30,6 +30,7 @@
       <button data-view="grid" class="on">Grid</button>
       <button data-view="list">List</button>
       <button data-view="upgrade">Upgrade</button>
+      <button data-view="gamble">Gamble</button>
     </div>
     <div class="seg" role="group" aria-label="Currency">
       <button data-cur="chaos" class="on">Chaos</button>
@@ -88,6 +89,36 @@
           <th data-usort="profit" class="num">Profit</th>
           <th data-usort="roi" class="num">ROI</th>
           <th data-usort="volume" class="num">Result volume</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+  <section id="gamble-view" hidden>
+    <p class="muted intro">
+      Spend 30 Primal Crystallised Lifeforce to turn an essence into a random different one of the same tier.
+      Hysteria, Insanity, Horror and Delirium only turn into each other; Desolation and Trickery can't be gambled. Expected profit = average price of the other
+      essences in its pool − this essence's price − lifeforce.
+    </p>
+    <p class="warn intro">
+      <b>Odds are assumed.</b> We don't have the real odds, so every possible outcome is treated as equally
+      likely. If the valuable essences are rarer than that, gambling is worse than shown here.
+    </p>
+    <div id="gamble-summary"></div>
+    <h2>Expected profit per gamble</h2>
+    <div id="gamble-grid"></div>
+    <h2>All gambles</h2>
+    <label class="check"><input type="checkbox" id="gamble-profitable-only"> Profitable only</label>
+    <table id="gambles">
+      <thead>
+        <tr>
+          <th data-gsort="name">Essence</th>
+          <th data-gsort="cost" class="num">Cost</th>
+          <th data-gsort="value" class="num">Avg. result</th>
+          <th data-gsort="profit" class="num">Exp. profit</th>
+          <th data-gsort="roi" class="num">ROI</th>
+          <th data-gsort="winRate" class="num" title="Share of outcomes worth more than the essence plus the lifeforce">Win chance</th>
+          <th data-gsort="volume" class="num">Volume</th>
         </tr>
       </thead>
       <tbody></tbody>

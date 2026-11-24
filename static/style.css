@@ -174,18 +174,18 @@ h2 { font-size: 15px; margin: 24px 0 8px; }
 .special img { width: 32px; height: 32px; }
 
 /* list + upgrades */
-#list, #upgrades { width: 100%; border-collapse: collapse; min-width: 560px; }
-#list th, #list td, #upgrades th, #upgrades td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; }
-#list th, #upgrades th { font-size: 12px; color: var(--muted); font-weight: 600; cursor: pointer; user-select: none; white-space: nowrap; }
+#list, #upgrades, #gambles { width: 100%; border-collapse: collapse; min-width: 560px; }
+#list th, #list td, #upgrades th, #upgrades td, #gambles th, #gambles td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+#list th, #upgrades th, #gambles th { font-size: 12px; color: var(--muted); font-weight: 600; cursor: pointer; user-select: none; white-space: nowrap; }
 th.sorted::after { content: " ▾"; }
 th.sorted.asc::after { content: " ▴"; }
-#list .num, #upgrades .num { text-align: right; font-variant-numeric: tabular-nums; }
-#list tbody tr, #upgrades tbody tr { cursor: pointer; }
-#list tbody tr:hover, #upgrades tbody tr:hover { background: var(--panel); }
+#list .num, #upgrades .num, #gambles .num { text-align: right; font-variant-numeric: tabular-nums; }
+#list tbody tr, #upgrades tbody tr, #gambles tbody tr { cursor: pointer; }
+#list tbody tr:hover, #upgrades tbody tr:hover, #gambles tbody tr:hover { background: var(--panel); }
 td.name { display: flex; align-items: center; gap: 8px; }
 td.name img { width: 24px; height: 24px; }
 #upgrades .step { white-space: nowrap; }
-#upgrades td.profit { font-weight: 600; }
+#upgrades td.profit, #gambles td.profit { font-weight: 600; }
 .intro { margin: 0 0 8px; }
 .check { display: inline-flex; gap: 6px; align-items: center; margin-bottom: 8px; cursor: pointer; }
 .stash-box { margin-bottom: 8px; }
@@ -210,6 +210,11 @@ td.name img { width: 24px; height: 24px; }
   font: inherit; color: var(--text); background: var(--panel); cursor: pointer;
   border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px;
 }
+.pools { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin: 12px 0 8px; }
+.pool { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.pool > span { display: block; font-size: 11px; color: var(--muted); }
+.pool b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.warn, .pool > .warn { color: rgb(var(--warn-rgb)); }
 .upgrade-box { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-top: 12px; }
 .upgrade-box div { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
 .spark-col { width: 110px; }
