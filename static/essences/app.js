@@ -1,6 +1,8 @@
 // Only the tiers that actually drop in meaningful numbers; the server filters out the rest.
 const TIERS = ["Screaming", "Shrieking", "Deafening"];
-const VIEWS = ["grid", "list", "upgrade"];
+const VIEWS = ["grid", "list", "upgrade", "gamble"];
+const GAMBLE_LIFEFORCE = 30; // Primal Crystallised Lifeforce per gamble
+const SPECIAL_POOL = "Special";
 
 const state = {
   leagues: [],
@@ -12,6 +14,8 @@ const state = {
   sort: { key: "chaos", asc: false },
   usort: { key: "profit", asc: false },
   profitableOnly: false,
+  gsort: { key: "profit", asc: false },
+  gambleProfitableOnly: false,
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -363,6 +367,161 @@ function renderUpgrades() {
     </tr>`).join("") : `<tr><td colspan="7" class="muted">No upgrades match.</td></tr>`;
 }
 
+// ---------- gambling (Primal Lifeforce) ----------
+
+// The special essences that can be gambled. The others (Desolation, Trickery) can't be changed or rolled.
+const GAMBLE_SPECIALS = new Set(["Hysteria", "Insanity", "Horror", "Delirium"]);
+
+// Which essences can turn into each other: each tier is a pool, and the special essences are one pool.
+// Takes a poe.ninja essence or a stash layout cell. null means it can't be gambled.
+function gamblePool({ tier, kind }) {
+  return tier ?? (GAMBLE_SPECIALS.has(kind) ? SPECIAL_POOL : null);
+}
+
+// How many essences each pool really has, from the stash layout. poe.ninja only lists those that trade.
+function poolSizes() {
+  const sizes = {};
+  for (const row of state.layout?.rows ?? []) {
+    row.forEach((text, i) => {
+      const cell = layoutCell(text, state.layout.headers[i]);
+      const pool = cell && gamblePool(cell);
+      if (pool) sizes[pool] = (sizes[pool] ?? 0) + 1;
+    });
+  }
+  return sizes;
+}
+
+// Expected value of gambling each essence once. Every other priced essence in the pool is an equally
+// likely outcome; unpriced ones can't be counted, so `priced` vs. `size` says how complete a pool is.
+// Returns null when the lifeforce price is unknown.
+function computeGambles(data) {
+  if (data.primalLifeforce == null) return null;
+  const fee = GAMBLE_LIFEFORCE * data.primalLifeforce;
+  const sizes = poolSizes();
+  const pools = [...TIERS, SPECIAL_POOL].map((name) => {
+    const members = data.essences.filter((e) => gamblePool(e) === name && e.chaos != null);
+    const sum = members.reduce((s, e) => s + e.chaos, 0);
+    const n = members.length;
+    const size = Math.max(sizes[name] ?? 0, n);
+    const rows = n < 2 ? [] : members.map((e) => {
+      const others = members.filter((o) => o !== e);
+      const value = (sum - e.chaos) / (n - 1);
+      const cost = e.chaos + fee;
+      return {
+        e, pool: name, name: e.name, cost, value, volume: e.volume,
+        profit: value - cost,
+        roi: cost ? (value - cost) / cost * 100 : null,
+        winRate: others.filter((o) => o.chaos > cost).length / others.length * 100,
+        best: others.reduce((a, b) => (b.chaos > a.chaos ? b : a)),
+        worst: others.reduce((a, b) => (b.chaos < a.chaos ? b : a)),
+        priced: n, size,
+      };
+    });
+    // Solving (sum - p) / (n - 1) - p - fee > 0 for p: essences cheaper than this are worth gambling.
+    return { name, rows, priced: n, size, breakEven: n < 2 ? null : (sum - fee * (n - 1)) / n };
+  });
+  return { fee, pools, rows: pools.flatMap((p) => p.rows) };
+}
+
+function renderGambles() {
+  const g = computeGambles(state.data);
+  const summary = $("#gamble-summary");
+  if (!g) {
+    summary.innerHTML = `<p class="warn">No Primal Crystallised Lifeforce price for this league, so gambles can't be valued.</p>`;
+  } else {
+    const perChaos = state.data.primalLifeforce ? `(${(1 / state.data.primalLifeforce).toFixed(1)} per chaos)` : "";
+    const incomplete = g.pools.filter((p) => p.priced < p.size);
+    summary.innerHTML = `
+      <p><b>${GAMBLE_LIFEFORCE} Primal Lifeforce = ${price(g.fee)}</b> <span class="muted">${perChaos}</span></p>
+      <div class="pools">${g.pools.map((p) => `
+        <div class="pool">
+          <span>${esc(p.name)}: worth gambling below</span>
+          <b>${p.breakEven == null ? "—" : p.breakEven > 0 ? price(p.breakEven) : "never"}</b>
+          <span class="${p.priced < p.size ? "warn" : ""}">${p.rows.filter((r) => r.profit > 0).length} worth it · ${p.priced} of ${p.size} priced</span>
+        </div>`).join("")}
+      </div>
+      ${incomplete.length ? `<p class="warn">Some outcomes have no price in this league, so results for ${esc(incomplete.map((p) => p.name).join(", "))} only average the priced ones and may be off.</p>` : ""}`;
+  }
+  renderGambleGrid(g);
+  renderGambleTable(g);
+}
+
+const GAMBLE_LEGEND = `
+  <div class="legend" aria-label="Color key">
+    <span><i style="--sw:var(--up-rgb)"></i>Worth gambling on average</span>
+    <span><i style="--sw:var(--down-rgb)"></i>Loses on average</span>
+    <span>The percentage is the chance that a gamble comes out ahead.</span>
+  </div>`;
+
+function renderGambleGrid(g) {
+  if (layoutPending("#gamble-grid")) return;
+  const byId = new Map((g?.rows ?? []).map((r) => [r.e.id, r]));
+  // Shading is relative within each pool; otherwise the special essences would wash out every other tier.
+  const maxAbs = Object.fromEntries((g?.pools ?? []).map((p) => [p.name, Math.max(0, ...p.rows.map((r) => Math.abs(r.profit)))]));
+
+  $("#gamble-grid").innerHTML = GAMBLE_LEGEND + stashGridHtml((e) => {
+    const r = byId.get(e.id);
+    if (!r) {
+      return {
+        body: `<div class="p muted">—</div><div class="c muted">&nbsp;</div>`,
+        title: `${e.name}: ${!gamblePool(e) ? "can't be gambled" : g ? "not enough prices in its pool" : "no lifeforce price"}`,
+      };
+    }
+    return {
+      body: `<div class="p">${profitHtml(r.profit)}</div><div class="c muted">${Math.round(r.winRate)}% win</div>`,
+      heat: maxAbs[r.pool] ? 0.06 + (Math.abs(r.profit) / maxAbs[r.pool]) * 0.29 : 0,
+      heatColor: r.profit > 0 ? "var(--up-rgb)" : "var(--down-rgb)",
+      title: [
+        e.name,
+        `Costs ${price(r.cost)} (essence ${price(e.chaos)} + lifeforce ${price(g.fee)}), result worth ${price(r.value)} on average`,
+        `Best: ${r.best.name} (${price(r.best.chaos)})`,
+        `Worst: ${r.worst.name} (${price(r.worst.chaos)})`,
+      ].join("\n"),
+    };
+  }).html;
+}
+
+function renderGambleTable(g) {
+  const q = state.search.trim().toLowerCase();
+  let rows = (g?.rows ?? []).filter((r) => !q || r.name.toLowerCase().includes(q));
+  if (state.gambleProfitableOnly) rows = rows.filter((r) => r.profit > 0);
+
+  const { key, asc } = state.gsort;
+  rows.sort((a, b) => {
+    const x = a[key], y = b[key];
+    const r = typeof x === "string" ? x.localeCompare(y) : (x ?? -Infinity) - (y ?? -Infinity);
+    return asc ? r : -r;
+  });
+  document.querySelectorAll("#gambles th[data-gsort]").forEach((th) => {
+    th.classList.toggle("sorted", th.dataset.gsort === key);
+    th.classList.toggle("asc", th.dataset.gsort === key && asc);
+  });
+  $("#gambles tbody").innerHTML = rows.length ? rows.map((r) => `
+    <tr data-id="${esc(r.e.id)}">
+      <td class="name">${r.e.image ? `<img src="${esc(r.e.image)}" alt="" loading="lazy">` : ""}${esc(r.name)}</td>
+      <td class="num">${price(r.cost)}</td>
+      <td class="num">${price(r.value)}</td>
+      <td class="num profit">${profitHtml(r.profit)}</td>
+      <td class="num">${r.roi == null ? "—" : change(r.roi)}</td>
+      <td class="num">${Math.round(r.winRate)}%</td>
+      <td class="num">${volume(r.volume)}</td>
+    </tr>`).join("") : `<tr><td colspan="7" class="muted">No gambles match.</td></tr>`;
+}
+
+// Gamble verdict for one essence, shown in its detail dialog.
+function gambleBoxHtml(e) {
+  const r = computeGambles(state.data)?.rows.find((x) => x.e.id === e.id);
+  if (!r) return "";
+  return `
+    <div class="upgrade-box">
+      <div><span>Gamble with ${GAMBLE_LIFEFORCE} Primal Lifeforce: <b>${r.profit > 0 ? "worth it" : "not worth it"}</b></span><b>${profitHtml(r.profit)}</b></div>
+      <div class="muted"><span>Cost ${price(r.cost)} → worth ${price(r.value)} on average, ${Math.round(r.winRate)}% win chance</span><span>${r.roi == null ? "" : change(r.roi)}</span></div>
+      <div class="muted"><span>Best: ${esc(r.best.name)} (${price(r.best.chaos)})</span><span>Worst: ${esc(r.worst.name)} (${price(r.worst.chaos)})</span></div>
+      <div class="warn"><span>Odds are assumed: every outcome is treated as equally likely.</span></div>
+      ${r.priced < r.size ? `<div class="warn"><span>Only ${r.priced} of ${r.size} essences in its pool have a price.</span></div>` : ""}
+    </div>`;
+}
+
 // ---------- stash import (WealthyExile CSV) ----------
 
 // Minimal RFC 4180 parser: quoted fields, "" escapes, CRLF, and a leading BOM.
@@ -535,7 +694,7 @@ function fitText(el) {
 function render() {
   for (const v of VIEWS) $(`#${v}-view`).hidden = state.view !== v;
   if (!state.data) return;
-  ({ grid: renderGrid, list: renderList, upgrade: () => { renderStash(); renderUpgradeGrid(); renderUpgrades(); } })[state.view]();
+  ({ grid: renderGrid, list: renderList, upgrade: () => { renderStash(); renderUpgradeGrid(); renderUpgrades(); }, gamble: renderGambles })[state.view]();
   layoutStashGrids();
   const div = state.data.divinePrice ? ` · 1 div = ${state.data.divinePrice}c` : "";
   $("#status").textContent = `${state.data.essences.length} essences · updated ${ago(state.data.fetchedAt)}${div}`;
@@ -584,6 +743,7 @@ async function openDetail(id) {
         <div><span>${esc(u.step)}</span><b>${profitHtml(u.profit)}</b></div>
         <div class="muted"><span>Cost ${price(u.cost)} → worth ${price(u.value)}</span><span>${change(u.roi)}</span></div>
       </div>`).join("")}
+    ${gambleBoxHtml(e)}
     <div class="chart-title">Last 7 days (poe.ninja)</div>
     ${lineChart(week, (y) => price(y), (x) => (x === 0 ? "today" : `${-x}d ago`)) || `<p class="muted">No trend data.</p>`}
     <div class="chart-title">Recorded by this tracker</div>
@@ -638,7 +798,7 @@ async function init() {
   const leagues = state.leagues.map((l) => l.name);
   const saved = load("league", null);
   state.league = leagues.includes(saved) ? saved : leagues[0];
-  // A #grid / #list / #upgrade link (e.g. from the tools hub) wins over the remembered view.
+  // A #grid / #list / #upgrade / #gamble link (e.g. from the tools hub) wins over the remembered view.
   const hashView = location.hash.slice(1);
   state.view = VIEWS.includes(hashView) ? hashView : VIEWS.includes(load("view", "grid")) ? load("view", "grid") : "grid";
   state.currency = load("currency", "chaos");
@@ -680,6 +840,12 @@ async function init() {
     state.usort = { key, asc: state.usort.key === key ? !state.usort.asc : key === "kind" || key === "step" };
     render();
   }));
+  document.querySelectorAll("#gambles th[data-gsort]").forEach((th) => th.addEventListener("click", () => {
+    const key = th.dataset.gsort;
+    state.gsort = { key, asc: state.gsort.key === key ? !state.gsort.asc : key === "name" };
+    render();
+  }));
+  $("#gamble-profitable-only").addEventListener("change", (ev) => { state.gambleProfitableOnly = ev.target.checked; render(); });
   $("#profitable-only").addEventListener("change", (ev) => { state.profitableOnly = ev.target.checked; render(); });
   document.querySelector("main").addEventListener("click", (ev) => {
     const el = ev.target.closest("[data-id]");
