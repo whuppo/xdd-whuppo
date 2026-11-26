@@ -22,7 +22,7 @@ Tracks essence prices from [poe.ninja](https://poe.ninja).
 
 The hub also links to tools that live in their own repos:
 
-- **[Scalpel + Gem Scanner](https://github.com/richardC-git/scalpel/tree/gem-scanner):** a fork of the Scalpel overlay with an exceptional-gem scanner built in ([releases](https://github.com/richardC-git/scalpel/releases)).
+- **[Scalpel + Vivid Watcher Helper](https://github.com/richardC-git/scalpel/tree/gem-scanner):** a fork of the Scalpel overlay with a plugin for Vivid Watcher crafts built in. It scans and prices the 20/20 support gems they produce and logs every roll for an expected value per craft ([releases](https://github.com/richardC-git/scalpel/releases)).
 - **[POE Bulk Trade](https://github.com/richardC-git/POEBulkTradePlugin):** a Chrome extension that loads more trade results at once, folds duplicate listings and flags sellers with several of the searched item.
 
 ## Layout
