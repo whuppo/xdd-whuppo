@@ -18,6 +18,13 @@ Tracks essence prices from [poe.ninja](https://poe.ninja).
 - Lower tiers (Whispering through Wailing) aren't tracked, since they barely show up in the game.
 - Prices in chaos or divine, league selector, and a text filter.
 
+### Apps & extensions
+
+The hub also links to tools that live in their own repos:
+
+- **[Scalpel + Gem Scanner](https://github.com/richardC-git/scalpel/tree/gem-scanner):** a fork of the Scalpel overlay with an exceptional-gem scanner built in ([releases](https://github.com/richardC-git/scalpel/releases)).
+- **[POE Bulk Trade](https://github.com/richardC-git/POEBulkTradePlugin):** a Chrome extension that loads more trade results at once, folds duplicate listings and flags sellers with several of the searched item.
+
 ## Layout
 
 ```
@@ -33,6 +40,7 @@ static/
   index.html           tools hub
   style.css            shared styles (colors, header, cards, grids)
   theme.js             shared light/dark/auto toggle
+  icons/               local card icons
   config.js            where tools load data from (CloudFront in production, /data locally)
   essences/            Essence Prices tool (index.html, app.js, essence_tab.txt)
 test-data/             sample WealthyExile exports
