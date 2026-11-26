@@ -237,6 +237,40 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 svg.chart { width: 100%; height: 160px; display: block; }
 svg.chart text { fill: var(--muted); font-size: 10px; }
 
+/* xesht */
+.field { display: inline-flex; gap: 6px; align-items: center; }
+.field input { width: 70px; }
+.controls .check { margin-bottom: 0; }
+table.xt { width: 100%; border-collapse: collapse; min-width: 760px; }
+table.xt th, table.xt td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+table.xt th { font-size: 12px; color: var(--muted); font-weight: 600; user-select: none; white-space: nowrap; }
+table.xt th[data-sort] { cursor: pointer; }
+table.xt .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.xt tbody tr[data-pair] { cursor: pointer; }
+table.xt tbody tr[data-pair]:hover { background: var(--panel); }
+table.xt td.profit { font-weight: 600; }
+table.xt td.conv { display: flex; align-items: center; gap: 8px; }
+table.xt td.conv img { width: 28px; height: 28px; object-fit: contain; flex: none; }
+table.xt td.empty-row { text-align: center; padding: 24px; }
+.chips-cell { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip {
+  font-size: 12px; white-space: nowrap; border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px 8px; background: var(--panel);
+}
+.chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.chip.vendor { opacity: .5; }
+.chip.missing { border-style: dashed; color: var(--muted); }
+#hidden-note { font-size: 12px; margin-top: 12px; }
+dialog h4 { font-size: 13px; margin: 16px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.leg { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; }
+.leg-head { margin-bottom: 4px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.leg-head .warn { font-size: 12px; }
+.leg-row { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; font-size: 13px; }
+.leg-row.total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; font-weight: 600; }
+.variants { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px; }
+.variants ul { margin: 4px 0 0; padding-left: 18px; }
+.variants li { margin-bottom: 4px; }
+
 @media (max-width: 600px) {
   :root { --gutter: 16px; }
   input[type=search] { width: 100%; }
