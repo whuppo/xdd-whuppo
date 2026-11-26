@@ -18,6 +18,17 @@ Tracks essence prices from [poe.ninja](https://poe.ninja).
 - Lower tiers (Whispering through Wailing) aren't tracked, since they barely show up in the game.
 - Prices in chaos or divine, league selector, and a text filter.
 
+### Xesht Arbitrage (`/xesht/`)
+
+Ranks every Flesh of Xesht conversion by profit: buy a Breach unique and a Xesht, transform the unique into its alternate, sell the result.
+
+- **Plain view:** each non-Foulborn conversion in both directions, at each link count poe.ninja prices (unlinked, 5L, 6L). Profit = sale price × sell share − unique price − Xesht price.
+- **Foulborn view:** a Foulborn unique stays Foulborn, but its mod is re-rolled among the alternate's single-mod variants. Each row prices the cheapest single-mod input and shows every possible outcome, with expected profit (equal odds per outcome), worst case and win chance. Double-mod Foulborn items are ignored.
+- **Settings:** sell share (default 90%), minimum listings (default 10; thinner conversions are hidden, not deleted), valuing outcomes at 2c or less as 0, links, chaos or divine, league. All math runs in the browser, so settings apply instantly.
+- **Pair detail:** click a row for both directions of the pair, every link count, every outcome and the Foulborn mods' text.
+- The pairs and Foulborn variants are the `XESHT_PAIRS` and `XESHT_VARIANTS` constants in `update_data.py`, from the PoE Wiki's [List of Breach unique items](https://www.poewiki.net/wiki/List_of_Breach_unique_items) and [Foulborn unique item](https://www.poewiki.net/wiki/Foulborn_unique_item). Skin of the Loyal is left out: its alternate, Skin of the Lords, is always corrupted and poe.ninja doesn't price it.
+- Leagues where Flesh of Xesht doesn't trade (Hardcore, for one) are skipped.
+
 ### Apps & extensions
 
 The hub also links to tools that live in their own repos:
@@ -43,6 +54,7 @@ static/
   icons/               local card icons
   config.js            where tools load data from (CloudFront in production, /data locally)
   essences/            Essence Prices tool (index.html, app.js, essence_tab.txt)
+  xesht/               Xesht Arbitrage tool (index.html, app.js)
 test-data/             sample WealthyExile exports
 ```
 
@@ -121,4 +133,4 @@ Cost is effectively zero: a few cents a month at most for Lambda, S3 and CloudFr
 
 ## Data source
 
-`https://poe.ninja/poe1/api/economy/exchange/current/overview?league=<League>&type=Essence` (and `type=Currency` for the lifeforce price). poe.ninja doesn't send CORS headers, so the browser can't call it directly; that's why prices are fetched by the updater (or the local server) and saved as static files. This API is undocumented and has changed before. If prices stop updating, check the Lambda's CloudWatch logs and this endpoint first.
+`https://poe.ninja/poe1/api/economy/exchange/current/overview?league=<League>&type=Essence` (and `type=Currency` for the lifeforce and Flesh of Xesht prices), and `https://poe.ninja/poe1/api/economy/stash/current/item/overview?league=<League>&type=<UniqueWeapon|UniqueArmour|UniqueAccessory|UniqueJewel>` for the Xesht tool's uniques. poe.ninja doesn't send CORS headers, so the browser can't call it directly; that's why prices are fetched by the updater (or the local server) and saved as static files. This API is undocumented and has changed before. If prices stop updating, check the Lambda's CloudWatch logs and this endpoint first.

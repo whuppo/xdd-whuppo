@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Xesht Arbitrage · xdd.whuppo</title>
+<link rel="stylesheet" href="../style.css">
+<style>:root { --content-w: 1040px; }</style>
+<script>
+  // Apply the saved theme before first paint so there's no flash of the wrong colors.
+  try {
+    const t = localStorage.getItem("theme");
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  } catch {}
+</script>
+</head>
+<body>
+<header>
+  <a class="back" href="../">← All tools</a>
+  <div class="brand">
+    <h1><img class="title-icon" id="title-icon" src="https://web.poecdn.com/gen/image/WzI1LDE0LHsiZiI6IjJESXRlbXMvQ3VycmVuY3kvQ2hheXVsYS9Db3JlQnJlYWNoQ3VycmVuY3kiLCJzY2FsZSI6MX1d/32fda5c220/CoreBreachCurrency.png" alt="">Xesht Arbitrage</h1>
+    <span id="status" class="muted"></span>
+    <div class="seg" role="group" aria-label="Theme">
+      <button id="theme" title="Theme: follows your system">◐ Auto</button>
+    </div>
+  </div>
+  <div class="controls">
+    <select id="league" aria-label="League"></select>
+    <div class="seg" role="group" aria-label="View">
+      <button data-view="plain" class="on">Plain</button>
+      <button data-view="foulborn">Foulborn</button>
+    </div>
+    <div class="seg" role="group" aria-label="Links">
+      <button data-links="all" class="on">Any links</button>
+      <button data-links="0">Unlinked</button>
+      <button data-links="5">5L</button>
+      <button data-links="6">6L</button>
+    </div>
+    <div class="seg" role="group" aria-label="Currency">
+      <button data-cur="chaos" class="on">Chaos</button>
+      <button data-cur="divine">Divine</button>
+    </div>
+    <input id="search" type="search" placeholder="Filter…" aria-label="Filter uniques">
+  </div>
+  <div class="controls">
+    <label class="field" title="What you expect to sell for, as a share of the poe.ninja price">Sell at
+      <input id="haircut" type="number" min="50" max="100" step="1" value="90">%</label>
+    <label class="field" title="Hide conversions where the input or any outcome has fewer listings than this">Min. listings
+      <input id="min-listings" type="number" min="0" max="200" step="1" value="10"></label>
+    <label class="check" title="poe.ninja shows hard-to-sell items at about 1c; count outcomes at 2c or less as worth nothing">
+      <input type="checkbox" id="zero-vendor" checked> Value ≤2c outcomes at 0</label>
+    <label class="check"><input type="checkbox" id="profitable-only"> Profitable only</label>
+  </div>
+</header>
+
+<main>
+  <p class="muted intro" id="intro-plain">
+    Buy a Breach unique and a Flesh of Xesht, transform the unique into its alternate, and sell it.
+    Profit = sale price × sell share − unique price − Xesht price. Click a row for both directions of the pair.
+  </p>
+  <p class="muted intro" id="intro-foulborn" hidden>
+    A Foulborn unique stays Foulborn, but its Foulborn mod is re-rolled among the alternate's single-mod variants,
+    so the outcome is random and the input's own mod doesn't matter: each row prices the cheapest one.
+    Expected profit assumes every outcome is equally likely. Double-mod Foulborn items are left out.
+  </p>
+  <section id="plain-view">
+    <table class="xt" id="plain">
+      <thead>
+        <tr>
+          <th data-sort="from">Conversion</th>
+          <th data-sort="links" class="num">Links</th>
+          <th data-sort="cost" class="num" title="Unique + Flesh of Xesht">Cost</th>
+          <th data-sort="sell" class="num">Sells for</th>
+          <th data-sort="profit" class="num">Profit</th>
+          <th data-sort="roi" class="num">ROI</th>
+          <th data-sort="listings" class="num" title="Listings of the input / the outcome">Listings</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+  <section id="foulborn-view" hidden>
+    <table class="xt" id="foulborn">
+      <thead>
+        <tr>
+          <th data-sort="from">Conversion</th>
+          <th data-sort="links" class="num">Links</th>
+          <th data-sort="cost" class="num" title="Cheapest single-mod Foulborn input + Flesh of Xesht">Cost</th>
+          <th>Possible outcomes</th>
+          <th data-sort="profit" class="num">Exp. profit</th>
+          <th data-sort="worst" class="num" title="Profit if the worst outcome lands">Worst</th>
+          <th data-sort="win" class="num" title="Share of outcomes that turn a profit">Win chance</th>
+          <th data-sort="listings" class="num" title="Fewest listings among the input and the outcomes">Listings</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+  <p id="hidden-note" class="muted"></p>
+</main>
+
+<dialog id="detail">
+  <form method="dialog"><button class="close" aria-label="Close">×</button></form>
+  <div id="detail-body"></div>
+</dialog>
+
+<footer class="muted">
+  Prices from <a href="https://poe.ninja" target="_blank" rel="noopener">poe.ninja</a>, refreshed every 30 min.
+  Conversions from the <a href="https://www.poewiki.net/wiki/Flesh_of_Xesht" target="_blank" rel="noopener">PoE Wiki</a>.
+  Not affiliated with Grinding Gear Games.
+</footer>
+
+<script src="../theme.js"></script>
+<script src="../config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
